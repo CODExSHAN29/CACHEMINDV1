@@ -144,6 +144,15 @@ class VectorIndex:
         vector: List[float],
         response_payload: Dict[str, Any],
         created_at: float,
+        input_text: str = "",
+        system_prompt: Optional[str] = None,
+        provider: str = "unknown",
+        model: str = "unknown",
+        ttl_seconds: Optional[int] = None,
+        tenant_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        namespace: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> None:
         """
         Insert a vector entry into the index.

@@ -1,9 +1,10 @@
 import json
 import logging
-from typing import Optional
+from typing import Any, List, Optional, Tuple
 import redis.asyncio as redis
 from redis.exceptions import RedisError
 
+from backend.app.config import settings
 from backend.caching.backend import ExactCacheBackend
 from backend.caching.models import CachedResponse
 
@@ -14,21 +15,89 @@ class RedisExactCache(ExactCacheBackend):
     """
     Production Redis-backed exact cache implementation with automatic serialization,
     TTL enforcement, and graceful degradation (fail-open) on Redis connectivity issues.
+    Supports Standalone Redis, Redis Cluster, and Redis Sentinel high-availability.
     """
 
-    def __init__(self, redis_url: str, socket_timeout: float = 2.0) -> None:
-        self.redis_url = redis_url
-        self.socket_timeout = socket_timeout
-        self._client: Optional[redis.Redis] = None
+    def __init__(
+        self,
+        redis_url: Optional[str] = None,
+        socket_timeout: Optional[float] = None,
+        cluster_mode: Optional[bool] = None,
+        sentinel_hosts: Optional[str] = None,
+        sentinel_master: Optional[str] = None,
+        password: Optional[str] = None,
+        ssl: Optional[bool] = None,
+        max_connections: Optional[int] = None,
+    ) -> None:
+        self.redis_url = redis_url or settings.REDIS_URL
+        self.socket_timeout = socket_timeout if socket_timeout is not None else settings.REDIS_SOCKET_TIMEOUT
+        self.cluster_mode = cluster_mode if cluster_mode is not None else settings.REDIS_CLUSTER_MODE
+        self.sentinel_hosts = sentinel_hosts if sentinel_hosts is not None else settings.REDIS_SENTINEL_HOSTS
+        self.sentinel_master = sentinel_master or settings.REDIS_SENTINEL_MASTER
+        self.password = password or settings.REDIS_PASSWORD
+        self.ssl = ssl if ssl is not None else settings.REDIS_SSL
+        self.max_connections = max_connections or settings.REDIS_MAX_CONNECTIONS
+        self._client: Any = None
 
-    def _get_client(self) -> redis.Redis:
-        if self._client is None:
-            self._client = redis.from_url(
-                self.redis_url,
-                socket_timeout=self.socket_timeout,
-                socket_connect_timeout=self.socket_timeout,
-                decode_responses=True,
-            )
+    def _parse_sentinel_hosts(self, hosts_str: str) -> List[Tuple[str, int]]:
+        hosts = []
+        for part in hosts_str.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if ":" in part:
+                h, p = part.split(":", 1)
+                hosts.append((h.strip(), int(p.strip())))
+            else:
+                hosts.append((part, 26379))
+        return hosts
+
+    def _get_client(self) -> Any:
+        if self._client is not None:
+            return self._client
+
+        if self.sentinel_hosts:
+            try:
+                from redis.asyncio.sentinel import Sentinel
+                hosts = self._parse_sentinel_hosts(self.sentinel_hosts)
+                sentinel = Sentinel(
+                    hosts,
+                    socket_timeout=self.socket_timeout,
+                    password=self.password,
+                    ssl=self.ssl,
+                    decode_responses=True,
+                )
+                self._client = sentinel.master_for(self.sentinel_master)
+                logger.info("Initialized Redis Sentinel client for master '%s'", self.sentinel_master)
+                return self._client
+            except Exception as exc:
+                logger.warning("Failed to initialize Redis Sentinel: %s, falling back to standalone URL", exc)
+
+        if self.cluster_mode:
+            try:
+                from redis.asyncio.cluster import RedisCluster
+                self._client = RedisCluster.from_url(
+                    self.redis_url,
+                    socket_timeout=self.socket_timeout,
+                    password=self.password,
+                    ssl=self.ssl,
+                    max_connections=self.max_connections,
+                    decode_responses=True,
+                )
+                logger.info("Initialized Redis Cluster client")
+                return self._client
+            except Exception as exc:
+                logger.warning("Failed to initialize Redis Cluster: %s, falling back to standalone", exc)
+
+        self._client = redis.from_url(
+            self.redis_url,
+            socket_timeout=self.socket_timeout,
+            socket_connect_timeout=self.socket_timeout,
+            password=self.password,
+            ssl=self.ssl,
+            max_connections=self.max_connections,
+            decode_responses=True,
+        )
         return self._client
 
     def _make_key(self, project_id: str, exact_request_hash: str) -> str:
@@ -45,7 +114,7 @@ class RedisExactCache(ExactCacheBackend):
                 return None
             data_dict = json.loads(raw_data)
             return CachedResponse(**data_dict)
-        except (RedisError, ConnectionError, TimeoutError, json.JSONDecodeError) as err:
+        except Exception as err:
             logger.warning("Redis cache get error (graceful fail-open): %s", err)
             return None
 
@@ -62,7 +131,7 @@ class RedisExactCache(ExactCacheBackend):
             client = self._get_client()
             raw_json = payload.model_dump_json()
             await client.set(key, raw_json, ex=ttl)
-        except (RedisError, ConnectionError, TimeoutError) as err:
+        except (RedisError, ConnectionError, TimeoutError, IndexError, OSError, Exception) as err:
             logger.warning("Redis cache set error (graceful bypass): %s", err)
 
     async def delete(self, project_id: str, exact_request_hash: str) -> bool:
@@ -71,7 +140,7 @@ class RedisExactCache(ExactCacheBackend):
             client = self._get_client()
             deleted_count = await client.delete(key)
             return bool(deleted_count > 0)
-        except (RedisError, ConnectionError, TimeoutError) as err:
+        except (RedisError, ConnectionError, TimeoutError, IndexError, OSError, Exception) as err:
             logger.warning("Redis cache delete error: %s", err)
             return False
 
@@ -81,12 +150,10 @@ class RedisExactCache(ExactCacheBackend):
         key = self._make_key(project_id, exact_request_hash)
         try:
             client = self._get_client()
-            # If entry exists, we can store hit counts or increment in a separate key or in payload
-            # For simplicity and Redis atomic safety, use a subkey counter
             counter_key = f"{key}:hits"
             hits = await client.incr(counter_key)
             return hits
-        except (RedisError, ConnectionError, TimeoutError) as err:
+        except (RedisError, ConnectionError, TimeoutError, IndexError, OSError, Exception) as err:
             logger.warning("Redis cache increment_hit error: %s", err)
             return 0
 
@@ -111,7 +178,7 @@ class RedisExactCache(ExactCacheBackend):
                 if cursor == 0:
                     break
             return deleted_count
-        except (RedisError, ConnectionError, TimeoutError) as err:
+        except (RedisError, ConnectionError, TimeoutError, IndexError, OSError, Exception) as err:
             logger.warning("Redis cache purge_project error: %s", err)
             return 0
 
@@ -129,7 +196,7 @@ class RedisExactCache(ExactCacheBackend):
                 if cursor == 0:
                     break
             return matching_keys[:limit]
-        except (RedisError, ConnectionError, TimeoutError) as err:
+        except (RedisError, ConnectionError, TimeoutError, IndexError, OSError, Exception) as err:
             logger.warning("Redis cache list_keys error: %s", err)
             return []
 
@@ -137,10 +204,15 @@ class RedisExactCache(ExactCacheBackend):
         try:
             client = self._get_client()
             await client.flushdb()
-        except (RedisError, ConnectionError, TimeoutError) as err:
+        except (RedisError, ConnectionError, TimeoutError, IndexError, OSError, Exception) as err:
             logger.warning("Redis cache clear error: %s", err)
 
     async def close(self) -> None:
         if self._client is not None:
-            await self._client.aclose()
+            if hasattr(self._client, "aclose"):
+                await self._client.aclose()
+            elif hasattr(self._client, "close"):
+                res = self._client.close()
+                if hasattr(res, "__await__"):
+                    await res
             self._client = None

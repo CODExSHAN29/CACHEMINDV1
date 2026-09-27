@@ -15,9 +15,14 @@ services:
       - HOST=0.0.0.0
       - PORT=8000
       - CACHE_BACKEND=redis
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - DB_URL=sqlite+aiosqlite:////app/data/cachemind.db
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://cachemind_user:cachemind_password@postgres:5432/cachemind_db
+      - AUTO_RUN_MIGRATIONS=true
+      - DB_POOL_SIZE=20
+      - DB_MAX_OVERFLOW=10
+      - DB_POOL_TIMEOUT=30.0
+      - DB_POOL_RECYCLE=1800
+      - DB_POOL_PRE_PING=true
       - PII_MASKING_ENABLED=true
       - PII_MASKING_MODE=mask
       - DEV_TENANT_ID=dev-tenant-001
@@ -25,11 +30,31 @@ services:
       - DEV_API_KEY=cm_live_development_key_1234567890abcdef
       - OPENAI_API_KEY=${OPENAI_API_KEY:-mock-openai-key}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-mock-anthropic-key}
-    volumes:
-      - cachemind_data:/app/data
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - cachemind-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: cachemind-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=cachemind_user
+      - POSTGRES_PASSWORD=cachemind_password
+      - POSTGRES_DB=cachemind_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cachemind_user -d cachemind_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - cachemind-net
 
@@ -64,7 +89,7 @@ services:
       - cachemind-net
 
 volumes:
-  cachemind_data:
+  postgres_data:
   redis_data:
 
 networks:

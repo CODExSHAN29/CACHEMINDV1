@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import uuid
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     Column,
@@ -8,7 +9,9 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
+    Text,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -98,3 +101,34 @@ class RequestLog(Base):
         Index("ix_request_logs_project_created", "project_id", "created_at"),
         Index("ix_request_logs_tenant_created", "tenant_id", "created_at"),
     )
+
+
+class SemanticVectorEntry(Base):
+    __tablename__ = "semantic_cache_entries"
+
+    id = Column(String(64), primary_key=True, default=generate_uuid)
+    scope_hash = Column(String(64), nullable=False, index=True)
+    exact_request_hash = Column(String(64), nullable=False, unique=True, index=True)
+    tenant_id = Column(String(64), nullable=True, index=True)
+    project_id = Column(String(64), nullable=True, index=True)
+
+    provider = Column(String(64), nullable=False, default="unknown")
+    model = Column(String(128), nullable=False, default="unknown")
+    system_prompt = Column(Text, nullable=True)
+    input_text = Column(Text, nullable=True)
+
+    namespace = Column(String(128), nullable=True, index=True)
+    tags = Column(JSON, nullable=True)
+
+    response_payload = Column(JSON, nullable=False)
+    embedding = Column(Vector(384), nullable=False)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    ttl_seconds = Column(Integer, nullable=True, default=86400)
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+
+    __table_args__ = (
+        Index("ix_semantic_scope_created", "scope_hash", "created_at"),
+        Index("ix_semantic_tenant_scope", "tenant_id", "scope_hash"),
+    )
+

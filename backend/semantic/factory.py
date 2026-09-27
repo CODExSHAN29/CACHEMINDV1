@@ -11,6 +11,17 @@ from .embedding import EmbeddingEngine, get_embedding_engine, set_embedding_engi
 from .vector_index import VectorIndex, get_vector_index, set_vector_index
 from .models import SemanticCacheEntry
 from .backend import SemanticCacheBackend
+from backend.app.config import settings
+
+try:
+    from .pgvector_backend import PgVectorSemanticBackend
+except Exception:
+    PgVectorSemanticBackend = None  # type: ignore
+
+try:
+    from .qdrant_backend import QdrantSemanticBackend
+except Exception:
+    QdrantSemanticBackend = None  # type: ignore
 
 
 class SemanticCacheFactory:
@@ -75,6 +86,23 @@ class SemanticCacheFactory:
     def set_volatility_engine(cls, engine) -> None:
         """Override the singleton VolatilityEngine (for testing)."""
         cls._volatility_engine = engine
+
+    @classmethod
+    def get_vector_backend(cls) -> SemanticCacheBackend:
+        """Dynamic backend selection: memory / pgvector / qdrant."""
+        backend = settings.VECTOR_BACKEND
+        if backend == "pgvector" and PgVectorSemanticBackend is not None:
+            return PgVectorSemanticBackend()
+        elif backend == "qdrant" and QdrantSemanticBackend is not None:
+            return QdrantSemanticBackend()
+        else:
+            # Default in-memory vector index wrapper
+            return get_semantic_cache_service()
+
+    @classmethod
+    def get_semantic_cache_service(cls) -> "SemanticCacheService":
+        """Get or create the SemanticCacheService instance."""
+        return get_semantic_cache_service()
 
     @classmethod
     def reset_singletons(cls) -> None:

@@ -4,6 +4,7 @@ from typing import AsyncGenerator
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from backend.app.config import settings
@@ -11,8 +12,8 @@ from backend.app.main import app
 from backend.auth.keys import generate_api_key
 from backend.caching.factory import set_cache_backend
 from backend.caching.memory import InMemoryExactCache
-from backend.db.models import APIKey, Base, Project, Tenant
-from backend.db.session import get_db
+from backend.db.models import APIKey, Base, Project, Tenant, SemanticVectorEntry
+from backend.db.session import get_db, set_engine
 from backend.guardrails.arbiter import GuardrailArbiter
 from backend.guardrails.volatility import VolatilityEngine
 from backend.guardrails.factory import set_guardrail_arbiter, set_volatility_engine
@@ -26,14 +27,16 @@ from backend.semantic.embedding import MockEmbeddingEngine
 from backend.semantic.factory import SemanticCacheFactory
 from backend.semantic.vector_index import VectorIndex
 
-# Use in-memory SQLite for lightning fast, isolated test execution
+# Use in-memory SQLite with StaticPool for lightning fast, isolated, persistent test execution
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 test_engine = create_async_engine(
     TEST_DATABASE_URL,
     connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
     future=True,
 )
+set_engine(test_engine)
 
 TestingAsyncSessionLocal = async_sessionmaker(
     bind=test_engine,
