@@ -1,0 +1,45 @@
+name: CacheMind CI & Test Suite
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Run Unit & Integration Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest pytest-asyncio httpx pydantic fastapi uvicorn prometheus-client pyyaml
+
+      - name: Execute Full Pytest Suite
+        env:
+          PYTHONPATH: .
+          DEV_API_KEY: cm_live_dev_master_key_1234567890
+        run: |
+          python -m pytest -v
+
+      - name: Run Live Verification Smoke Test
+        env:
+          PYTHONPATH: .
+          DEV_API_KEY: cm_live_dev_master_key_1234567890
+        run: |
+          python scripts/verify_live.py
