@@ -1,6 +1,12 @@
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.analytics.service import AnalyticsService
+from backend.auth.dependencies import get_authenticated_identity
+from backend.auth.identity import AuthenticatedIdentity
+from backend.db.session import get_db
 
 router = APIRouter(tags=["Dashboard"])
 
@@ -453,3 +459,29 @@ async def get_dashboard() -> HTMLResponse:
     Renders the CacheMind Observability & Analytics Web Dashboard.
     """
     return HTMLResponse(content=DASHBOARD_HTML)
+
+
+@router.get("/v1/dashboard/summary")
+async def get_dashboard_summary(
+    tenant_id: str = Query(default="tenant_default"),
+    identity: AuthenticatedIdentity = Depends(get_authenticated_identity),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Returns aggregated metrics summary formatted for the Next.js developer dashboard.
+    """
+    service = AnalyticsService(db)
+    overview = await service.get_overview(tenant_id=tenant_id)
+    return {
+        "total_requests": overview.total_requests,
+        "exact_hits": overview.exact_hits,
+        "semantic_hits": overview.semantic_hits,
+        "cache_misses": overview.misses,
+        "cache_hit_ratio": overview.hit_rate_pct,
+        "tokens_saved": overview.tokens_saved,
+        "cost_saved_usd": overview.estimated_cost_saved_usd,
+        "average_latency_ms": overview.avg_gateway_latency_ms,
+        "cached_average_latency_ms": overview.avg_cache_lookup_ms,
+        "uncached_average_latency_ms": overview.avg_upstream_latency_ms,
+        "latency_reduction_percent": overview.net_savings_pct,
+    }

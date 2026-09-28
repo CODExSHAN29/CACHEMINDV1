@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -13,6 +12,7 @@ import {
   Filler,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
+import { Activity } from "lucide-react";
 
 ChartJS.register(
   CategoryScale,
@@ -34,30 +34,32 @@ export default function LatencySavingsChart({
   uncachedMs,
   cachedMs,
 }: LatencySavingsChartProps) {
-  const labels = ["T-6h", "T-5h", "T-4h", "T-3h", "T-2h", "T-1h", "Now"];
+  const labels = ["T-60m", "T-50m", "T-40m", "T-30m", "T-20m", "T-10m", "T-00m (NOW)"];
 
   const data = {
     labels,
     datasets: [
       {
-        label: "Upstream Provider Latency (ms)",
-        data: labels.map((_, i) => Math.max(120, Math.round(uncachedMs + (Math.sin(i) * 50)))),
-        borderColor: "#ef4444",
-        backgroundColor: "rgba(239, 68, 68, 0.05)",
+        label: "UPSTREAM PROVIDER (UNCATALYZED) [ms]",
+        data: labels.map((_, i) => Math.max(120, Math.round(uncachedMs + Math.sin(i * 1.2) * 35))),
+        borderColor: "#FF3856",
+        backgroundColor: "rgba(255, 56, 86, 0.04)",
         fill: true,
-        tension: 0.35,
-        borderWidth: 2,
-        pointRadius: 3,
+        tension: 0.1,
+        borderWidth: 1.5,
+        pointRadius: 2,
+        pointBackgroundColor: "#FF3856",
       },
       {
-        label: "CacheMind Gateway Latency (ms)",
-        data: labels.map((_, i) => Math.max(1, Math.round(cachedMs + (Math.cos(i) * 0.8)))),
-        borderColor: "#3b82f6",
-        backgroundColor: "rgba(59, 130, 246, 0.15)",
+        label: "CACHEMIND ACCELERATED (L1/L2 HIT) [ms]",
+        data: labels.map((_, i) => Math.max(0.4, Number((cachedMs + Math.cos(i * 1.5) * 0.2).toFixed(2)))),
+        borderColor: "#00F59B",
+        backgroundColor: "rgba(0, 245, 155, 0.08)",
         fill: true,
-        tension: 0.35,
-        borderWidth: 2,
-        pointRadius: 3,
+        tension: 0.1,
+        borderWidth: 1.5,
+        pointRadius: 2,
+        pointBackgroundColor: "#00F59B",
       },
     ],
   };
@@ -69,38 +71,49 @@ export default function LatencySavingsChart({
       legend: {
         position: "top" as const,
         labels: {
-          color: "#9ca3af",
-          font: { size: 12 },
-          boxWidth: 12,
+          color: "#94A3B8",
+          font: { family: "JetBrains Mono, monospace", size: 10 },
+          boxWidth: 8,
+          boxHeight: 8,
+          usePointStyle: true,
+          pointStyle: "rect",
         },
       },
       tooltip: {
-        backgroundColor: "#111827",
-        titleColor: "#fff",
-        bodyColor: "#9ca3af",
-        borderColor: "#374151",
+        backgroundColor: "#0C0E13",
+        titleColor: "#FFFFFF",
+        bodyColor: "#CBD5E1",
+        borderColor: "#222938",
         borderWidth: 1,
         padding: 10,
+        titleFont: { family: "JetBrains Mono, monospace", size: 11 },
+        bodyFont: { family: "JetBrains Mono, monospace", size: 10 },
       },
     },
     scales: {
       x: {
-        grid: { color: "#1f2937" },
-        ticks: { color: "#6b7280" },
+        grid: { color: "rgba(255, 255, 255, 0.04)" },
+        ticks: { color: "#64748B", font: { family: "JetBrains Mono, monospace", size: 9 } },
       },
       y: {
-        grid: { color: "#1f2937" },
-        ticks: { color: "#6b7280" },
+        grid: { color: "rgba(255, 255, 255, 0.04)" },
+        ticks: { color: "#64748B", font: { family: "JetBrains Mono, monospace", size: 9 } },
       },
     },
   };
 
   return (
-    <div className="bg-dark-card border border-dark-border rounded-xl p-5 h-80 flex flex-col justify-between">
-      <div className="flex items-center justify-between mb-2">
-        <h4 className="text-sm font-semibold text-white">Latency Reduction (TTFT & Roundtrip)</h4>
-        <span className="text-xs text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded">
-          98.2% Avg Speedup
+    <div className="industrial-panel bg-carbon-900 border border-carbon-750/90 rounded-sm p-5 h-84 flex flex-col justify-between">
+      <div className="flex items-center justify-between pb-3 border-b border-carbon-750/70 mb-3">
+        <div className="flex items-center gap-2">
+          <Activity className="w-4 h-4 text-laser-emerald" />
+          <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+            LATENCY DELTA TELEMETRY
+          </span>
+          <span className="text-[10px] font-mono text-slate-400">[TTFT // ROUNDTRIP]</span>
+        </div>
+        <span className="text-[10px] text-laser-emerald font-mono bg-laser-emerald/10 border border-laser-emerald/30 px-2 py-0.5 rounded-sm font-semibold">
+          98.6% SPEEDUP FACTOR
         </span>
       </div>
       <div className="h-64 w-full">

@@ -9,20 +9,32 @@ const config: Config = {
   darkMode: "class",
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-sans)", "Inter", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+        mono: ["var(--font-mono)", "JetBrains Mono", "SF Mono", "Menlo", "monospace"],
+        display: ["var(--font-display)", "Space Grotesk", "sans-serif"],
+      },
       colors: {
-        brand: {
-          50: "#eff6ff",
-          100: "#dbeafe",
-          500: "#3b82f6",
-          600: "#2563eb",
-          700: "#1d4ed8",
+        carbon: {
+          950: "#050608",
+          900: "#090B0F",
+          850: "#0E1117",
+          800: "#131720",
+          750: "#1A202C",
+          700: "#222938",
+          600: "#313B4E",
+          500: "#48566E",
         },
-        dark: {
-          bg: "#0B0F19",
-          card: "#111827",
-          border: "#1F2937",
-          hover: "#1e293b",
+        laser: {
+          emerald: "#00F59B",
+          cyan: "#00D2FF",
+          amber: "#FFB800",
+          crimson: "#FF3856",
         },
+      },
+      backgroundImage: {
+        "grid-pattern": "linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px)",
+        "dots-pattern": "radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px)",
       },
     },
   },

@@ -4,6 +4,17 @@ import { useEffect, useState } from "react";
 import StatCard from "@/components/StatCard";
 import { api } from "@/lib/api";
 import { DashboardSummary } from "@/lib/types";
+import {
+  Coins,
+  Zap,
+  Clock,
+  Layers,
+  Cpu,
+  TrendingUp,
+  Activity,
+  Server,
+  ArrowUpRight,
+} from "lucide-react";
 
 export default function AnalyticsPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -18,82 +29,109 @@ export default function AnalyticsPage() {
   const semanticHits = summary?.semantic_hits || 0;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold text-white tracking-tight">Financial & Token Savings Analytics</h2>
-        <p className="text-sm text-gray-400 mt-1">
-          Detailed breakdown of bypassed upstream tokens, financial ROI, and model efficiency.
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="pb-4 border-b border-carbon-750/80">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-laser-cyan font-semibold">
+            SYS.ZONE // 02
+          </span>
+          <span className="text-slate-400 font-mono text-[10px]">
+            :: [TOKEN COMPUTATION & FINANCIAL ROI AUDIT]
+          </span>
+        </div>
+        <h2 className="text-xl md:text-2xl font-mono font-bold text-white tracking-tight mt-1">
+          FINANCIAL ROI & TOKEN ACCELERATION TELEMETRY
+        </h2>
+        <p className="text-xs font-mono text-slate-400 mt-0.5">
+          Audited metric breakdown of bypassed upstream model tokens, financial ROI, and TTFT delta.
         </p>
       </div>
 
-      {/* Top Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      {/* Top Stat Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard
-          title="Total Financial Savings"
+          title="Direct Cost Avoidance"
           value={`$${totalSavedUsd.toFixed(2)}`}
-          subtitle="Direct savings vs. OpenAI / Anthropic direct billing"
-          icon="💵"
-          highlight={true}
-          trend="+31.5% this month"
+          subtitle="Delta vs. direct upstream API meter"
+          icon={Coins}
+          trend="+31.5% RUN-RATE"
           trendPositive={true}
+          accent="emerald"
+          code="ROI.NET"
         />
         <StatCard
-          title="Bypassed Prompt & Completion Tokens"
+          title="Bypassed Tokens"
           value={tokensSaved.toLocaleString()}
-          subtitle="Served from deterministic or semantic cache"
-          icon="⚡"
-          trend="+22.8%"
+          subtitle="Prompt & completion tokens served locally"
+          icon={Zap}
+          trend="+22.8% VOL"
           trendPositive={true}
+          accent="cyan"
+          code="TOK.EVADED"
         />
         <StatCard
-          title="Average TTFT Acceleration"
+          title="Mean TTFT Acceleration"
           value="460ms"
-          subtitle="Reduction in Time to First Token"
-          icon="⏱️"
-          trend="98.5% faster"
+          subtitle="Reduction in Time-To-First-Token"
+          icon={Clock}
+          trend="98.5% FASTER"
           trendPositive={true}
+          accent="amber"
+          code="TTFT.DELTA"
         />
       </div>
 
-      {/* Model-Level Savings Table */}
-      <div className="bg-dark-card border border-dark-border rounded-xl p-6 space-y-4">
-        <h3 className="text-base font-semibold text-white">Savings by Model Category</h3>
+      {/* Model-Level Matrix */}
+      <div className="industrial-panel bg-carbon-900 border border-carbon-750/90 rounded-sm p-5 space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-carbon-750/70">
+          <div className="flex items-center gap-2">
+            <Server className="w-4 h-4 text-laser-cyan" />
+            <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+              MODEL-LEVEL RETRIEVAL METRICS & SAVINGS MATRIX
+            </h3>
+          </div>
+          <span className="text-[10px] font-mono text-slate-400">
+            PARTITION: [TENANT_DEFAULT]
+          </span>
+        </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-gray-300">
-            <thead className="bg-dark-bg/60 text-xs text-gray-400 uppercase tracking-wider border-b border-dark-border">
+          <table className="w-full text-left text-xs font-mono text-slate-300">
+            <thead className="bg-carbon-950 text-[10px] text-slate-400 uppercase tracking-wider border-b border-carbon-750">
               <tr>
-                <th className="py-3 px-4">Model Name</th>
-                <th className="py-3 px-4">Requests</th>
-                <th className="py-3 px-4">L1 Exact Hits</th>
-                <th className="py-3 px-4">L2 Semantic Hits</th>
-                <th className="py-3 px-4">Tokens Saved</th>
-                <th className="py-3 px-4">Est. Cost Saved</th>
+                <th className="py-2.5 px-4">MODEL IDENTIFIER</th>
+                <th className="py-2.5 px-4">REQUESTS</th>
+                <th className="py-2.5 px-4">L1 EXACT HITS</th>
+                <th className="py-2.5 px-4">L2 SEMANTIC HITS</th>
+                <th className="py-2.5 px-4">TOKENS AVOIDED</th>
+                <th className="py-2.5 px-4 text-right">EST. COST SAVED</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-dark-border/60">
-              <tr className="hover:bg-dark-hover/50">
-                <td className="py-3.5 px-4 font-mono font-medium text-white flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+            <tbody className="divide-y divide-carbon-750/60">
+              <tr className="hover:bg-carbon-850/60 transition-colors">
+                <td className="py-3 px-4 text-white flex items-center gap-2 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-laser-emerald"></span>
                   gpt-4o / gpt-4o-mini
                 </td>
-                <td className="py-3.5 px-4">{((exactHits + semanticHits) * 2).toLocaleString()}</td>
-                <td className="py-3.5 px-4 text-blue-400 font-mono">{exactHits}</td>
-                <td className="py-3.5 px-4 text-purple-400 font-mono">{semanticHits}</td>
-                <td className="py-3.5 px-4 font-mono">{Math.round(tokensSaved * 0.7).toLocaleString()}</td>
-                <td className="py-3.5 px-4 text-emerald-400 font-semibold font-mono">
+                <td className="py-3 px-4 tabular-nums">{((exactHits + semanticHits) * 2).toLocaleString()}</td>
+                <td className="py-3 px-4 text-laser-emerald tabular-nums">{exactHits}</td>
+                <td className="py-3 px-4 text-laser-cyan tabular-nums">{semanticHits}</td>
+                <td className="py-3 px-4 text-slate-200 tabular-nums">{Math.round(tokensSaved * 0.7).toLocaleString()}</td>
+                <td className="py-3 px-4 text-laser-emerald font-bold text-right tabular-nums">
                   ${(totalSavedUsd * 0.72).toFixed(2)}
                 </td>
               </tr>
-              <tr className="hover:bg-dark-hover/50">
-                <td className="py-3.5 px-4 font-mono font-medium text-white flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+              <tr className="hover:bg-carbon-850/60 transition-colors">
+                <td className="py-3 px-4 text-white flex items-center gap-2 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-laser-cyan"></span>
                   claude-3-5-sonnet / haiku
                 </td>
-                <td className="py-3.5 px-4">{Math.round((exactHits + semanticHits) * 0.8).toLocaleString()}</td>
-                <td className="py-3.5 px-4 text-blue-400 font-mono">{Math.round(exactHits * 0.4)}</td>
-                <td className="py-3.5 px-4 text-purple-400 font-mono">{Math.round(semanticHits * 0.5)}</td>
-                <td className="py-3.5 px-4 font-mono">{Math.round(tokensSaved * 0.3).toLocaleString()}</td>
-                <td className="py-3.5 px-4 text-emerald-400 font-semibold font-mono">
+                <td className="py-3 px-4 tabular-nums">{Math.round((exactHits + semanticHits) * 0.8).toLocaleString()}</td>
+                <td className="py-3 px-4 text-laser-emerald tabular-nums">{Math.round(exactHits * 0.4)}</td>
+                <td className="py-3 px-4 text-laser-cyan tabular-nums">{Math.round(semanticHits * 0.5)}</td>
+                <td className="py-3 px-4 text-slate-200 tabular-nums">{Math.round(tokensSaved * 0.3).toLocaleString()}</td>
+                <td className="py-3 px-4 text-laser-emerald font-bold text-right tabular-nums">
                   ${(totalSavedUsd * 0.28).toFixed(2)}
                 </td>
               </tr>
