@@ -1,0 +1,36 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/codexshan29/cachemind
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+env:
+  ENVIRONMENT: "production"
+  CACHE_TYPE: "redis"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  SEMANTIC_CACHE_TYPE: "pgvector"
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "cachemind"
+  POSTGRES_USER: "cachemind"
+  POSTGRES_PASSWORD: "changeme"
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70

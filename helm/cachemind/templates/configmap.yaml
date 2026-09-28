@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+data:
+  ENVIRONMENT: "{{ .Values.env.ENVIRONMENT }}"
+  CACHE_TYPE: "{{ .Values.env.CACHE_TYPE }}"
+  REDIS_HOST: "{{ .Values.env.REDIS_HOST }}"
+  REDIS_PORT: "{{ .Values.env.REDIS_PORT }}"
+  SEMANTIC_CACHE_TYPE: "{{ .Values.env.SEMANTIC_CACHE_TYPE }}"
+  POSTGRES_HOST: "{{ .Values.env.POSTGRES_HOST }}"
+  POSTGRES_PORT: "{{ .Values.env.POSTGRES_PORT }}"
+  POSTGRES_DB: "{{ .Values.env.POSTGRES_DB }}"

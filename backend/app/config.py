@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     PII_MASKING_ENABLED: bool = True
     PII_MASKING_MODE: Literal["mask", "block", "passthrough"] = "mask"
 
+    # Stripe billing integration
+    STRIPE_SECRET_KEY: str | None = None
+    STRIPE_WEBHOOK_SECRET: str | None = None
+    STRIPE_BILLING_ENABLED: bool = False
+
     # Master Admin Key for /v1/admin/* management
     ADMIN_MASTER_KEY: str = "cm_admin_master_secret_key_9999999999999999"
 

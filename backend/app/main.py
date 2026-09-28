@@ -8,6 +8,7 @@ from sqlalchemy import select
 from backend.app.config import settings
 from backend.api.v1.admin import router as admin_router
 from backend.api.v1.analytics import router as analytics_router
+from backend.api.v1.billing import router as billing_router
 from backend.api.v1.cache_endpoint import router as cache_router
 from backend.api.v1.chat import router as chat_router
 from backend.api.v1.dashboard import router as dashboard_router
@@ -114,6 +115,7 @@ app.include_router(models_router)
 app.include_router(analytics_router)
 app.include_router(cache_router)
 app.include_router(admin_router)
+app.include_router(billing_router)
 app.include_router(health_router)
 app.include_router(metrics_router)
 app.include_router(dashboard_router)

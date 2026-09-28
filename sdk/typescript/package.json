@@ -1,0 +1,25 @@
+{
+  "name": "@cachemind/sdk",
+  "version": "0.1.0",
+  "description": "Official TypeScript & Node.js Client SDK for CacheMind Semantic Caching Gateway",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "cachemind",
+    "llm",
+    "semantic-cache",
+    "openai",
+    "anthropic",
+    "gateway",
+    "cache"
+  ],
+  "author": "CODExSHAN29",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
