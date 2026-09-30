@@ -7,7 +7,6 @@ from backend.normalization.models import (
 )
 from backend.normalization.canonicalizer import (
     canonical_json,
-    canonicalize_data,
     canonicalize_request,
     sha256_json,
 )
@@ -19,7 +18,6 @@ __all__ = [
     "NormalizedMessage",
     "NormalizedToolCall",
     "canonical_json",
-    "canonicalize_data",
     "canonicalize_request",
     "sha256_json",
     "OpenAIAdapter",

@@ -15,7 +15,10 @@ async def test_alembic_migration_lifecycle(tmp_path):
     db_file = tmp_path / "test_migration.db"
     test_db_url = f"sqlite+aiosqlite:///{db_file.as_posix()}"
 
-    alembic_cfg = Config("alembic.ini")
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    ini_path = os.path.join(repo_root, "alembic.ini")
+    alembic_cfg = Config(ini_path)
+    alembic_cfg.set_main_option("script_location", os.path.join(repo_root, "alembic"))
     alembic_cfg.set_main_option("sqlalchemy.url", test_db_url)
 
     # 1. Upgrade to head

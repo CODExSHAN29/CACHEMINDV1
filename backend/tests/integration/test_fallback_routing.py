@@ -75,3 +75,36 @@ async def test_circuit_breaker_fast_fail_skips_open_provider():
     result = await engine.execute(req, plan=plan)
     assert result.provider_used == "healthy"
     assert result.fallback_hops == 1
+
+
+@pytest.mark.asyncio
+async def test_endpoint_diagnostic_routing_headers(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    tenant_a_fixtures: dict,
+):
+    raw_key = tenant_a_fixtures["raw_key"]
+    headers = {"Authorization": f"Bearer {raw_key}"}
+
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "user", "content": "Diagnostic routing headers test"}],
+        "temperature": 0.0,
+    }
+
+    # 1. Miss Request
+    resp1 = await async_client.post("/v1/chat/completions", headers=headers, json=payload)
+    assert resp1.status_code == 200
+    assert resp1.headers["X-CacheMind-Status"] == "MISS"
+    assert "X-CacheMind-Provider" in resp1.headers
+    assert "X-CacheMind-Model" in resp1.headers
+    assert resp1.headers["X-CacheMind-Fallback-Hops"] == "0"
+
+    # 2. Exact Hit Request
+    resp2 = await async_client.post("/v1/chat/completions", headers=headers, json=payload)
+    assert resp2.status_code == 200
+    assert resp2.headers["X-CacheMind-Status"] == "EXACT_HIT"
+    assert "X-CacheMind-Provider" in resp2.headers
+    assert resp2.headers["X-CacheMind-Model"] == "gpt-4o-mini"
+    assert resp2.headers["X-CacheMind-Fallback-Hops"] == "0"
+

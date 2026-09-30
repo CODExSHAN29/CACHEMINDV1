@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.config import settings
 from backend.auth.dependencies import get_authenticated_identity
 from backend.auth.identity import AuthenticatedIdentity
+from backend.caching.coalescer import get_request_coalescer
 from backend.caching.factory import get_cache_backend
 from backend.caching.fingerprint import compute_exact_request_hash, compute_scope_hash, extract_system_prompt
 from backend.caching.models import CachedResponse
@@ -54,6 +55,10 @@ async def create_chat_completion(
         hdr_tags = request.headers.get("X-CacheMind-Tags")
         if hdr_tags and not norm_req.tags:
             norm_req.tags = [t.strip() for t in hdr_tags.split(",") if t.strip()]
+
+        hdr_fallback = request.headers.get("X-CacheMind-Allow-Fallback") or request.headers.get("X-CacheMind-Fallback")
+        if hdr_fallback is not None:
+            norm_req.allow_provider_fallback = hdr_fallback.strip().lower() in ("true", "1", "yes")
 
         # PII Sanitization
         pii_mode = request.headers.get("X-CacheMind-PII-Mode") or settings.PII_MASKING_MODE
@@ -183,6 +188,9 @@ async def create_chat_completion(
             "X-CacheMind-Exact-Hash": exact_request_hash,
             "X-CacheMind-Gateway-Latency-Ms": f"{gateway_latency_ms:.3f}",
             "X-CacheMind-Lookup-Ms": f"{exact_cache_lookup_ms:.3f}",
+            "X-CacheMind-Provider": cached.provider or norm_req.provider,
+            "X-CacheMind-Model": response_body.get("model", norm_req.model),
+            "X-CacheMind-Fallback-Hops": "0",
             **rl_headers,
         }
 
@@ -289,6 +297,9 @@ async def create_chat_completion(
                         "X-CacheMind-Similarity": f"{cand.similarity:.4f}",
                         "X-CacheMind-Gateway-Latency-Ms": f"{gateway_latency_ms:.3f}",
                         "X-CacheMind-Lookup-Ms": f"{exact_cache_lookup_ms:.3f}",
+                        "X-CacheMind-Provider": cand_payload.get("provider", norm_req.provider),
+                        "X-CacheMind-Model": response_body.get("model", norm_req.model),
+                        "X-CacheMind-Fallback-Hops": "0",
                         **rl_headers,
                     }
 
@@ -332,6 +343,7 @@ async def create_chat_completion(
                 "X-CacheMind-Exact-Hash": exact_request_hash,
                 "X-CacheMind-Lookup-Ms": f"{exact_cache_lookup_ms:.3f}",
                 "X-CacheMind-Provider": streaming_result.provider_used,
+                "X-CacheMind-Model": streaming_result.model_used,
                 "X-CacheMind-Fallback-Hops": str(streaming_result.fallback_hops),
                 **rl_headers,
             }
@@ -360,11 +372,17 @@ async def create_chat_completion(
                 detail=f"Upstream provider failure: {str(exc)}",
             )
 
-    # Non-streaming Cache Miss pathway
+    # Non-streaming Cache Miss pathway with Single-Flight Coalescing
     upstream_called = True
     upstream_start_ns = time.perf_counter_ns()
+    coalescer = get_request_coalescer()
+    coalesce_key = f"{identity.tenant_id}:{identity.project_id}:{exact_request_hash}"
+    was_coalesced = False
     try:
-        routing_result = await routing_engine.execute(norm_req)
+        routing_result, was_coalesced = await coalescer.do(
+            coalesce_key,
+            lambda: routing_engine.execute(norm_req),
+        )
         provider_resp = routing_result.response
         upstream_latency_ms = (time.perf_counter_ns() - upstream_start_ns) / 1_000_000
     except HTTPException:
@@ -481,7 +499,9 @@ async def create_chat_completion(
         "X-CacheMind-Lookup-Ms": f"{exact_cache_lookup_ms:.3f}",
         "X-CacheMind-Upstream-Ms": f"{upstream_latency_ms:.3f}",
         "X-CacheMind-Provider": routing_result.provider_used,
+        "X-CacheMind-Model": provider_resp.model,
         "X-CacheMind-Fallback-Hops": str(routing_result.fallback_hops),
+        "X-CacheMind-Coalesced": "true" if was_coalesced else "false",
         **rl_headers,
     }
     return JSONResponse(content=provider_resp.raw_response, headers=headers)

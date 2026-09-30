@@ -9,6 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from backend.app.config import settings
 from backend.app.main import app
+
+# Test harness explicitly enables mock providers and embeddings.
+# These flags are ONLY effective in test/development; production must never set them.
+settings.ENVIRONMENT = "test"
+settings.ALLOW_MOCK_PROVIDERS = True
+settings.ALLOW_MOCK_EMBEDDINGS = True
 from backend.auth.keys import generate_api_key
 from backend.caching.factory import set_cache_backend
 from backend.caching.memory import InMemoryExactCache

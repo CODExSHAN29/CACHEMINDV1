@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import toast, { Toaster } from "react-hot-toast";
-import { KeyRound, ShieldCheck, Cpu, X, Check, Clock, Radio } from "lucide-react";
+import { KeyRound, ShieldCheck, X, Check, Clock, Radio, Cpu } from "lucide-react";
 
 export default function Navbar() {
   const [apiKey, setApiKey] = useState("");
@@ -26,7 +26,7 @@ export default function Navbar() {
   const handleSaveKeys = () => {
     localStorage.setItem("cachemind_api_key", apiKey.trim());
     localStorage.setItem("cachemind_admin_key", adminKey.trim());
-    toast.success("Gateway authentication credentials securely cached.");
+    toast.success("Gateway authentication credentials securely stored.");
     setIsOpen(false);
   };
 
@@ -36,32 +36,29 @@ export default function Navbar() {
         position="top-right"
         toastOptions={{
           style: {
-            background: "#0E1117",
-            color: "#F3F4F6",
-            border: "1px solid #222938",
+            background: "#ffffff",
+            color: "#0f172a",
+            border: "1px solid #cbd5e1",
             fontFamily: "var(--font-mono)",
             fontSize: "12px",
+            borderRadius: "0px",
           },
         }}
       />
-      <header className="h-16 border-b border-carbon-750/80 bg-carbon-900/90 backdrop-blur-md sticky top-0 z-30 flex items-center justify-between px-6 md:px-8">
+      <header className="h-14 border-b border-outline bg-surface sticky top-0 z-30 flex items-center justify-between px-6">
         {/* Left Telemetry Indicators */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           <div className="flex items-center gap-2">
-            <Radio className="w-3.5 h-3.5 text-laser-emerald animate-pulse" />
-            <span className="text-[11px] font-mono tracking-widest text-slate-400 uppercase">
-              GATEWAY:
-            </span>
-            <span className="text-[11px] font-mono text-slate-200 bg-carbon-800 px-2 py-0.5 rounded-sm border border-carbon-700">
+            <span className="w-2 h-2 bg-emerald-600 animate-pulse"></span>
+            <span className="label-caps">GATEWAY:</span>
+            <span className="text-[11px] font-mono text-on-surface bg-surface-dim px-2 py-0.5 border border-outline-variant">
               HTTP/2 // 0.0.0.0:8000
             </span>
           </div>
 
           <div className="hidden lg:flex items-center gap-2">
-            <span className="text-[11px] font-mono tracking-widest text-slate-400 uppercase">
-              EMBEDDER:
-            </span>
-            <span className="text-[11px] font-mono text-laser-cyan bg-laser-cyan/10 px-2 py-0.5 rounded-sm border border-laser-cyan/20">
+            <span className="label-caps">EMBEDDER:</span>
+            <span className="text-[11px] font-mono text-primary bg-secondary-container px-2 py-0.5 border border-blue-200">
               FASTEMBED // BGE-SMALL-EN-V1.5 (384D)
             </span>
           </div>
@@ -69,40 +66,40 @@ export default function Navbar() {
 
         {/* Right Controls & Clock */}
         <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 text-[11px] font-mono text-slate-400 bg-carbon-950 px-2.5 py-1 rounded-sm border border-carbon-750">
-            <Clock className="w-3 h-3 text-slate-400" />
+          <div className="hidden sm:flex items-center gap-2 text-[11px] font-mono text-on-surface-variant bg-surface-dim px-2.5 py-1 border border-outline-variant">
+            <Clock className="w-3.5 h-3.5 text-on-surface-variant" />
             <span className="tabular-nums">{time || "2026-09-28 00:00:00 UTC"}</span>
           </div>
 
           <button
             onClick={() => setIsOpen(true)}
-            className="flex items-center gap-2 text-xs font-mono bg-carbon-800 hover:bg-carbon-750 text-slate-200 hover:text-white px-3 py-1.5 rounded-sm border border-carbon-700 transition-colors shadow-sm"
+            className="flex items-center gap-2 text-xs font-mono font-semibold bg-surface hover:bg-surface-dim text-on-surface px-3 py-1.5 border border-outline transition-colors"
           >
-            <KeyRound className="w-3.5 h-3.5 text-laser-emerald" />
+            <KeyRound className="w-3.5 h-3.5 text-primary" />
             <span>GATEWAY AUTH</span>
           </button>
         </div>
       </header>
 
-      {/* Industrial Key Modal */}
+      {/* Technical Key Modal */}
       {isOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-carbon-900 border border-carbon-700 rounded-sm w-full max-w-lg p-6 shadow-2xl space-y-5 industrial-panel">
-            <div className="flex items-center justify-between pb-3 border-b border-carbon-750">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[1px] z-50 flex items-center justify-center p-4">
+          <div className="bg-surface border-2 border-on-surface w-full max-w-lg p-6 shadow-none space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-outline">
               <div className="flex items-center gap-2.5">
-                <ShieldCheck className="w-5 h-5 text-laser-emerald" />
+                <ShieldCheck className="w-5 h-5 text-primary" />
                 <div>
-                  <h3 className="text-sm font-mono font-bold text-white uppercase tracking-wider">
+                  <h3 className="text-sm font-display font-bold text-on-surface uppercase tracking-wider">
                     GATEWAY ACCESS CREDENTIALS
                   </h3>
-                  <p className="text-[11px] font-mono text-slate-400">
+                  <p className="text-[11px] font-mono text-on-surface-variant">
                     Scoped API authorization for tenant inference and master provisioning
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsOpen(false)}
-                className="text-slate-400 hover:text-white p-1 hover:bg-carbon-800 rounded-sm transition-colors"
+                className="text-on-surface-variant hover:text-on-surface p-1 hover:bg-surface-dim transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -111,47 +108,47 @@ export default function Navbar() {
             <div className="space-y-4 text-xs font-mono">
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold">
+                  <label className="text-on-surface-variant uppercase tracking-wider text-[10px] font-semibold">
                     TENANT INFERENCE KEY (`X-API-Key` or `Bearer`)
                   </label>
-                  <span className="text-[10px] text-laser-cyan">INFERENCE SCOPE</span>
+                  <span className="text-[10px] text-primary font-semibold">INFERENCE SCOPE</span>
                 </div>
                 <input
                   type="text"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="cm_live_..."
-                  className="w-full bg-carbon-950 border border-carbon-750 rounded-sm px-3 py-2 text-slate-100 font-mono text-xs focus:outline-none focus:border-laser-cyan"
+                  className="w-full bg-surface border border-outline px-3 py-2 text-on-surface font-mono text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold">
+                  <label className="text-on-surface-variant uppercase tracking-wider text-[10px] font-semibold">
                     MASTER ADMIN SECRET (`/v1/admin/*` & `/v1/cache/*`)
                   </label>
-                  <span className="text-[10px] text-laser-amber">ADMIN SCOPE</span>
+                  <span className="text-[10px] text-amber-700 font-semibold">ADMIN SCOPE</span>
                 </div>
                 <input
                   type="password"
                   value={adminKey}
                   onChange={(e) => setAdminKey(e.target.value)}
                   placeholder="cm_admin_..."
-                  className="w-full bg-carbon-950 border border-carbon-750 rounded-sm px-3 py-2 text-slate-100 font-mono text-xs focus:outline-none focus:border-laser-amber"
+                  className="w-full bg-surface border border-outline px-3 py-2 text-on-surface font-mono text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 />
               </div>
             </div>
 
-            <div className="pt-3 border-t border-carbon-750 flex justify-end gap-2.5 font-mono text-xs">
+            <div className="pt-3 border-t border-outline flex justify-end gap-2.5 font-mono text-xs">
               <button
                 onClick={() => setIsOpen(false)}
-                className="px-4 py-2 text-slate-400 hover:text-white hover:bg-carbon-800 rounded-sm transition-colors"
+                className="btn-secondary"
               >
                 DISMISS
               </button>
               <button
                 onClick={handleSaveKeys}
-                className="flex items-center gap-1.5 px-4 py-2 bg-laser-emerald text-carbon-950 font-bold hover:bg-emerald-400 rounded-sm transition-colors shadow-sm"
+                className="btn-primary flex items-center gap-1.5"
               >
                 <Check className="w-3.5 h-3.5" />
                 SAVE CREDENTIALS

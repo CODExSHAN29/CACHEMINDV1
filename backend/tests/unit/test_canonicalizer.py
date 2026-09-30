@@ -1,7 +1,6 @@
 import pytest
 from backend.normalization.canonicalizer import (
     canonical_json,
-    canonicalize_data,
     canonicalize_request,
     sha256_json,
 )

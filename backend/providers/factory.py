@@ -18,5 +18,3 @@ def set_provider(provider: BaseProvider, name: str = "openai") -> None:
     """Explicitly overrides upstream provider in the registry (used in tests)."""
     registry = get_provider_registry()
     registry.register(name, provider)
-    # Also register under mock and default keys for test isolation
-    registry.register("mock", provider)

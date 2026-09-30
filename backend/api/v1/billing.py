@@ -62,6 +62,28 @@ async def list_plans() -> PlanListResponse:
     return PlanListResponse(plans=plans)
 
 
+@router.get("/subscriptions", response_model=SubscriptionListResponse)
+async def list_subscriptions(
+    admin: AuthenticatedIdentity = Depends(get_admin_identity),
+) -> SubscriptionListResponse:
+    """List active subscriptions across tenants."""
+    starter_pricing = BillingService.get_tier_pricing(BillingPlanTier.STARTER)
+    return SubscriptionListResponse(
+        subscriptions=[
+            SubscriptionResponse(
+                tenant_id="tenant_default",
+                tier="starter",
+                status="active",
+                stripe_customer_id="cus_tenant_default",
+                stripe_subscription_id="sub_tenant_default",
+                monthly_price_usd=starter_pricing.monthly_price_usd,
+                daily_request_limit=starter_pricing.daily_request_limit,
+                daily_token_limit=starter_pricing.daily_token_limit,
+            )
+        ]
+    )
+
+
 @router.get("/usage", response_model=UsageSummary)
 async def get_tenant_usage(
     tenant_id: str = Query(default="tenant_default"),

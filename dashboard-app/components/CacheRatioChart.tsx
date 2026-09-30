@@ -34,8 +34,8 @@ export default function CacheRatioChart({
     datasets: [
       {
         data: [exactHits || 1, semanticHits || 1, misses || 1],
-        backgroundColor: ["#00F59B", "#00D2FF", "#222938"],
-        borderColor: "#090B0F",
+        backgroundColor: ["#1d4ed8", "#2563eb", "#cbd5e1"],
+        borderColor: "#ffffff",
         borderWidth: 2,
       },
     ],
@@ -49,7 +49,7 @@ export default function CacheRatioChart({
       legend: {
         position: "bottom" as const,
         labels: {
-          color: "#94A3B8",
+          color: "#475569",
           font: { family: "JetBrains Mono, monospace", size: 9 },
           boxWidth: 8,
           boxHeight: 8,
@@ -59,10 +59,10 @@ export default function CacheRatioChart({
         },
       },
       tooltip: {
-        backgroundColor: "#0C0E13",
-        titleColor: "#FFFFFF",
-        bodyColor: "#CBD5E1",
-        borderColor: "#222938",
+        backgroundColor: "#ffffff",
+        titleColor: "#0f172a",
+        bodyColor: "#475569",
+        borderColor: "#cbd5e1",
         borderWidth: 1,
         padding: 10,
         titleFont: { family: "JetBrains Mono, monospace", size: 11 },
@@ -72,16 +72,16 @@ export default function CacheRatioChart({
   };
 
   return (
-    <div className="industrial-panel bg-carbon-900 border border-carbon-750/90 rounded-sm p-5 h-84 flex flex-col justify-between">
-      <div className="flex items-center justify-between pb-3 border-b border-carbon-750/70 mb-2">
+    <div className="card-shell p-5 h-84 flex flex-col justify-between">
+      <div className="flex items-center justify-between pb-3 border-b border-outline-variant mb-2">
         <div className="flex items-center gap-2">
-          <PieChart className="w-4 h-4 text-laser-cyan" />
-          <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+          <PieChart className="w-4 h-4 text-primary" />
+          <span className="text-xs font-mono font-bold text-on-surface uppercase tracking-wider">
             CACHE DISTRIBUTION
           </span>
-          <span className="text-[10px] font-mono text-slate-400">[ZONE RATIO]</span>
+          <span className="text-[10px] font-mono text-on-surface-variant">[ZONE RATIO]</span>
         </div>
-        <span className="text-[10px] text-laser-cyan font-mono bg-laser-cyan/10 border border-laser-cyan/30 px-2 py-0.5 rounded-sm font-semibold">
+        <span className="badge-pill bg-blue-50 text-primary border-blue-200">
           {hitPercentage}% RETRIEVAL EFFICIENCY
         </span>
       </div>
