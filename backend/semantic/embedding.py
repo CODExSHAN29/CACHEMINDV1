@@ -56,7 +56,15 @@ class EmbeddingEngine:
         """Load the FastEmbed model if not already loaded, or fallback to mock engine."""
         if self._model is None and getattr(self, "_fallback_engine", None) is None:
             if not FASTEMBED_AVAILABLE:
-                self._fallback_engine = MockEmbeddingEngine(dim=self._embedding_dim)
+                # Check if mocks are allowed before falling back to MockEmbeddingEngine
+                from backend.app.config import settings
+                from backend.providers.registry import ProviderConfigurationError
+                if settings.ENVIRONMENT == "test" or settings.ALLOW_MOCK_EMBEDDINGS:
+                    self._fallback_engine = MockEmbeddingEngine(dim=self._embedding_dim)
+                else:
+                    raise ProviderConfigurationError(
+                        "FastEmbed not available and mock embeddings are not allowed in production"
+                    )
                 return
             self._model = TextEmbedding(
                 model_name=self._model_name,

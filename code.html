@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base { html, body { margin: 0; padding: 0; } body { overscroll-behavior: none; } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "on-tertiary": "#ffffff",
+          "background": "#f8fafc",
+          "surface-tint": "#2151da",
+          "on-surface": "#0f172a",
+          "outline-variant": "#e2e8f0",
+          "surface-dim": "#f1f5f9",
+          "error-container": "#fee2e2",
+          "on-primary-fixed": "#001551",
+          "tertiary-fixed": "#dbe1ff",
+          "secondary-fixed-dim": "#bec6e0",
+          "on-error": "#ffffff",
+          "on-secondary-container": "#1e293b",
+          "secondary": "#2563eb",
+          "tertiary-fixed-dim": "#b4c5ff",
+          "primary-fixed-dim": "#b7c4ff",
+          "tertiary": "#1e40af",
+          "on-secondary": "#ffffff",
+          "on-tertiary-container": "#1e3a8a",
+          "outline": "#cbd5e1",
+          "surface-container-high": "#e2e8f0",
+          "primary-fixed": "#dbeafe",
+          "surface-variant": "#f1f5f9",
+          "surface-container": "#f8fafc",
+          "surface": "#ffffff",
+          "secondary-container": "#eff6ff",
+          "inverse-primary": "#93c5fd",
+          "primary-container": "#1d4ed8",
+          "surface-container-highest": "#e2e8f0",
+          "surface-container-lowest": "#ffffff",
+          "on-tertiary-fixed": "#00174b",
+          "on-primary-container": "#ffffff",
+          "on-secondary-fixed-variant": "#1e293b",
+          "on-background": "#0f172a",
+          "inverse-surface": "#0f172a",
+          "surface-bright": "#ffffff",
+          "error": "#b91c1c",
+          "on-tertiary-fixed-variant": "#1d4ed8",
+          "primary": "#1d4ed8",
+          "secondary-fixed": "#dbeafe",
+          "inverse-on-surface": "#f8fafc",
+          "surface-container-low": "#f8fafc",
+          "on-surface-variant": "#475569",
+          "on-primary-fixed-variant": "#1e40af",
+          "on-secondary-fixed": "#0f172a",
+          "on-primary": "#ffffff",
+          "tertiary-container": "#1d4ed8",
+          "on-error-container": "#7f1d1d"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "margin": "1rem",
+          "space-md": "0.75rem",
+          "space-xl": "1.5rem",
+          "margin-desktop": "2rem",
+          "space-sm": "0.5rem",
+          "margin-tablet": "1.5rem",
+          "space-lg": "1rem",
+          "gutter": "1rem",
+          "space-xs": "0.25rem",
+          "gutter-desktop": "1.5rem"
+        },
+        "fontFamily": {
+          "display-hero": ["Space Grotesk", "sans-serif"],
+          "headline-lg": ["Space Grotesk", "sans-serif"],
+          "headline-md": ["Space Grotesk", "sans-serif"],
+          "headline-sm": ["Space Grotesk", "sans-serif"],
+          "body-lg": ["Space Grotesk", "sans-serif"],
+          "body-md": ["Space Grotesk", "sans-serif"],
+          "body-sm": ["Space Grotesk", "sans-serif"],
+          "label-code": ["JetBrains Mono", "monospace"],
+          "telemetry-data": ["JetBrains Mono", "monospace"],
+          "telemetry-metric": ["JetBrains Mono", "monospace"]
+        },
+        "fontSize": {
+          "display-hero": ["52px", { "lineHeight": "60px", "letterSpacing": "-0.03em", "fontWeight": "700" }],
+          "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+          "headline-md": ["22px", { "lineHeight": "30px", "letterSpacing": "-0.015em", "fontWeight": "600" }],
+          "headline-sm": ["18px", { "lineHeight": "26px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+          "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+          "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+          "body-sm": ["12px", { "lineHeight": "18px", "fontWeight": "400" }],
+          "label-code": ["11px", { "lineHeight": "14px", "letterSpacing": "0.06em", "fontWeight": "600" }],
+          "telemetry-metric": ["32px", { "lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+          "telemetry-data": ["13px", { "lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "500" }]
+        }
+      }
+    }
+  };
+</script></head><body class="bg-background text-on-surface antialiased selection:bg-primary-container selection:text-white min-h-screen"><header class="fixed top-0 left-0 w-full z-50 bg-white/95 backdrop-blur-md border-b border-outline-variant"><div class="h-16 w-full px-gutter-desktop flex items-center justify-between"><div class="flex items-center gap-space-lg"><a class="flex items-center gap-space-sm group" data-path="overview" href="#"><img alt="CacheMind Cybernetic Bolt Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAsoGU4JIIiiY8_AEdDNLGHi4rz07p55UwO-3mXdpEJ5IQ59XJ7lR0II2vexGHCqcIVDTa7OmjG2iSCFjccIW96vxayVmP6FPl4P_RjeUhY6ILEr7tJA7C7NITCekNJrInN-R_4MYy7MCb5PSZjjamIvXy2K8apECjAiwg_gG49TC1TzL8NHz6hAgDRjAbjLVQ4O-nq8yEfd8lJP46CAfhOgB0unL0UGd61Mw_HRnxd_oJTn0GcazynPQ"/><span class="font-headline-sm text-headline-sm uppercase tracking-tight text-on-surface font-bold">CacheMind</span></a><div class="hidden xl:flex items-center gap-space-xs px-space-sm py-1 bg-secondary-container border border-blue-200 rounded-full"><span class="relative flex h-2 w-2"><span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span></span><span class="font-label-code text-label-code text-primary uppercase font-bold">SYS: NOMINAL // SUB-2MS SLA</span></div></div><nav class="hidden lg:flex items-center gap-space-lg" data-active-classes="text-primary font-bold"><a class="font-label-code text-label-code uppercase text-on-surface-variant hover:text-primary transition-colors" data-path="architecture" href="#pipeline">Architecture</a><a class="font-label-code text-label-code uppercase text-on-surface-variant hover:text-primary transition-colors" data-path="real-time-flow" href="#interactive-simulator">Real-Time Flow</a><a class="font-label-code text-label-code uppercase text-on-surface-variant hover:text-primary transition-colors" data-path="benchmarks" href="#benchmarks">Benchmarks</a><a class="font-label-code text-label-code uppercase text-on-surface-variant hover:text-primary transition-colors" data-path="pii-guardrails" href="#pii-guardrails">PII Guardrails</a><a class="font-label-code text-label-code uppercase text-on-surface-variant hover:text-primary transition-colors" data-path="api-reference" href="#quickstart">API Reference</a><a class="font-label-code text-label-code uppercase text-on-surface-variant hover:text-primary transition-colors" data-path="documentation" href="#quickstart">Docs</a></nav><div class="flex items-center gap-space-md"><div class="hidden sm:flex items-center gap-space-sm"><a class="px-space-md py-space-xs bg-surface-container border border-outline text-on-surface font-label-code text-label-code uppercase rounded hover:border-primary hover:text-primary transition-colors" data-path="real-time-flow" href="#interactive-simulator">Live Demo</a><a class="px-space-md py-space-xs bg-primary text-white hover:bg-tertiary font-label-code text-label-code uppercase rounded font-bold transition-all" data-path="deploy-gateway" href="#quickstart">Deploy Gateway</a></div><div class="w-8 h-8 rounded bg-primary text-white flex items-center justify-center font-bold text-xs">CM</div></div></div></header><main class="w-full pt-16 bg-background"><div class="flex flex-col w-full">
+<!-- SCIENTIFIC DOSSIER HERO SECTION -->
+<section class="relative w-full bg-background py-space-xl px-margin sm:px-margin-tablet lg:px-gutter-desktop border-b border-outline-variant">
+<div class="relative z-10 max-w-7xl mx-auto flex flex-col gap-space-lg">
+<!-- Dossier Scientific Calibration Badge -->
+<div class="flex flex-wrap items-center justify-between gap-space-sm bg-white border border-outline-variant px-space-md py-space-xs rounded-lg">
+<div class="flex items-center gap-space-sm flex-wrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-secondary-container border border-blue-200 text-primary font-label-code text-label-code uppercase tracking-wider font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+            EXP_05 // LIGHT CONDUIT
+          </span>
+<span class="font-label-code text-label-code text-on-surface-variant tracking-widest uppercase">SPEC: CACHEMIND-STATION-V4</span>
+<span class="hidden md:inline text-outline font-label-code text-label-code">•</span>
+<span class="hidden md:inline font-label-code text-label-code text-primary font-semibold tracking-wider">ENTERPRISE GATEWAY PROTOCOL</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="font-label-code text-label-code text-on-surface-variant">STATION_TIME:</span>
+<span class="font-telemetry-data text-telemetry-data text-on-surface font-bold" id="epoch-timer">1712093842.109</span>
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+</div>
+</div>
+<!-- Main Headline & Abstract Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
+<div class="lg:col-span-8 flex flex-col gap-space-md">
+<div class="inline-flex items-center gap-2 text-primary font-label-code text-label-code uppercase tracking-widest font-bold">
+<span class="material-symbols-outlined text-[16px]">all_inclusive</span>
+            NEURAL LATENCY NULLIFICATION ARCHITECTURE
+          </div>
+<h1 class="font-display-hero text-display-hero uppercase tracking-tight text-on-surface leading-[1.05]">
+            Fiber-Optic <span class="text-primary underline decoration-2 underline-offset-8">Semantic Caching</span> for Generative AI
+          </h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-3xl">
+            Sub-2ms deterministic exact matching and sub-10ms quantized ONNX vector caching. Drop-in reverse proxy slashing LLM provider bills by 80% with zero PyTorch overhead, running entirely in C++/Rust-accelerated Python runtimes.
+          </p>
+<div class="flex flex-wrap items-center gap-space-md pt-space-xs">
+<a class="group relative inline-flex items-center gap-3 px-space-lg py-space-sm bg-primary border border-primary rounded text-white hover:bg-tertiary transition-all duration-200" href="#quickstart">
+<span class="material-symbols-outlined text-[20px] text-white">bolt</span>
+<span class="font-label-code text-label-code uppercase tracking-wider font-bold">Deploy Edge Gateway</span>
+<span class="bg-blue-900/40 text-blue-100 px-1.5 py-0.5 rounded font-label-code text-label-code text-[10px]">v4.8.2</span>
+</a>
+<a class="inline-flex items-center gap-2 px-space-md py-space-sm bg-white border border-outline text-on-surface hover:border-primary hover:text-primary rounded transition-all font-semibold" href="#pipeline">
+<span class="material-symbols-outlined text-[18px]">account_tree</span>
+<span class="font-label-code text-label-code uppercase tracking-wider">Inspect Conduit Topology</span>
+</a>
+<div class="flex items-center gap-2 px-3 py-1.5 bg-secondary-container border border-blue-200 rounded">
+<span class="material-symbols-outlined text-[16px] text-primary">verified</span>
+<span class="font-label-code text-label-code text-primary font-bold uppercase">106/106 SUITES GREEN</span>
+</div>
+</div>
+</div>
+<!-- Telemetry Key Vault Card (Right Col) -->
+<div class="lg:col-span-4 bg-white border border-outline-variant rounded-xl p-space-md flex flex-col gap-space-md">
+<div class="flex items-center justify-between pb-space-xs border-b border-outline-variant">
+<span class="font-label-code text-label-code uppercase tracking-widest text-on-surface-variant font-bold">FINOPS REALTIME GAIN</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-primary border border-blue-200 font-label-code text-label-code font-bold">LIVE DELTA</span>
+</div>
+<div>
+<div class="font-telemetry-metric text-telemetry-metric text-primary font-bold">$418,290.40</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant flex items-center justify-between mt-1">
+<span>Cumulative Token Deflation</span>
+<span class="text-primary font-telemetry-data text-telemetry-data font-bold bg-secondary-container px-1.5 py-0.5 rounded">81.4% REDUCTION</span>
+</div>
+</div>
+<!-- Micro FinOps Sparkline -->
+<div class="w-full h-14 bg-surface-container-low border border-outline-variant rounded p-1 flex items-end">
+<svg class="w-full h-full overflow-visible" preserveaspectratio="none" viewbox="0 0 300 40">
+<path d="M0,35 Q30,30 60,32 T120,24 T180,18 T240,10 T300,4 L300,40 L0,40 Z" fill="#dbeafe"></path>
+<path d="M0,35 Q30,30 60,32 T120,24 T180,18 T240,10 T300,4" fill="none" stroke="#1d4ed8" stroke-width="2.5"></path>
+</svg>
+</div>
+<div class="grid grid-cols-2 gap-space-xs text-left pt-space-xs">
+<div class="bg-surface-container border border-outline-variant p-2.5 rounded">
+<div class="font-label-code text-label-code text-on-surface-variant uppercase font-semibold">P99 SLA Overhead</div>
+<div class="font-telemetry-data text-telemetry-data text-primary font-bold mt-1">&lt; 1.42 ms</div>
+</div>
+<div class="bg-surface-container border border-outline-variant p-2.5 rounded">
+<div class="font-label-code text-label-code text-on-surface-variant uppercase font-semibold">Memory Footprint</div>
+<div class="font-telemetry-data text-telemetry-data text-on-surface font-bold mt-1">112 MB RSS</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Live Status Telemetry Bar -->
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-space-xs bg-white border border-outline-variant p-space-xs rounded-xl">
+<!-- Metric 1 -->
+<div class="p-space-sm bg-surface-container border border-outline-variant rounded flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-code text-label-code text-on-surface-variant uppercase font-semibold">INGRESS QPS</span>
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+</div>
+<div class="font-telemetry-metric text-telemetry-metric text-on-surface">48,290<span class="font-label-code text-label-code text-on-surface-variant font-normal ml-1">/s</span></div>
+<span class="font-body-sm text-body-sm text-primary font-semibold">Mesh Sync: Nominal</span>
+</div>
+<!-- Metric 2 -->
+<div class="p-space-sm bg-surface-container border border-outline-variant rounded flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-code text-label-code text-on-surface-variant uppercase font-semibold">L1 EXACT LATENCY</span>
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+</div>
+<div class="font-telemetry-metric text-telemetry-metric text-primary">0.85<span class="font-label-code text-label-code text-on-surface-variant font-normal ml-1">ms</span></div>
+<span class="font-body-sm text-body-sm text-on-surface-variant font-label-code font-medium">1,400x Provider Speed</span>
+</div>
+<!-- Metric 3 -->
+<div class="p-space-sm bg-surface-container border border-outline-variant rounded flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-code text-label-code text-on-surface-variant uppercase font-semibold">L2 SEMANTIC HIT</span>
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+</div>
+<div class="font-telemetry-metric text-telemetry-metric text-secondary">4.20<span class="font-label-code text-label-code text-on-surface-variant font-normal ml-1">ms</span></div>
+<span class="font-body-sm text-body-sm text-on-surface-variant font-label-code font-medium">280x Provider Speed</span>
+</div>
+<!-- Metric 4 -->
+<div class="p-space-sm bg-surface-container border border-outline-variant rounded flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-code text-label-code text-on-surface-variant uppercase font-semibold">HIT RATIO AVG</span>
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+</div>
+<div class="font-telemetry-metric text-telemetry-metric text-on-surface">89.4<span class="font-label-code text-label-code text-on-surface-variant font-normal ml-1">%</span></div>
+<span class="font-body-sm text-body-sm text-primary font-label-code font-semibold">Target: &gt; 75.0%</span>
+</div>
+<!-- Metric 5 -->
+<div class="col-span-2 sm:col-span-1 p-space-sm bg-surface-container border border-outline-variant rounded flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-code text-label-code text-on-surface-variant uppercase font-semibold">LUHN &amp; PII SHIELD</span>
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+</div>
+<div class="font-telemetry-metric text-telemetry-metric text-primary">100<span class="font-label-code text-label-code text-on-surface-variant font-normal ml-1">%</span></div>
+<span class="font-body-sm text-body-sm text-on-surface-variant font-label-code font-medium">Zero Leakage Enforced</span>
+</div>
+</div>
+<!-- INTERACTIVE QUERY SIMULATOR / FIBER-OPTIC TEST HARNESS -->
+<div class="relative bg-white border border-outline-variant rounded-xl p-space-md lg:p-space-lg" id="interactive-simulator">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-sm pb-space-md border-b border-outline-variant">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[24px]">terminal</span>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface uppercase tracking-tight font-bold">Interactive Conduit Canvas</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Trigger synthesized payloads to witness deterministic hash routing, PII sanitization &amp; quantized vector cosine match.</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-label-code text-label-code text-on-surface-variant uppercase font-bold">SIMULATION PRESET:</span>
+<button class="px-2.5 py-1 text-xs font-label-code bg-secondary-container hover:bg-blue-100 text-primary border border-blue-200 rounded font-bold transition-all" id="preset-exact">Exact Match</button>
+<button class="px-2.5 py-1 text-xs font-label-code bg-surface-container hover:bg-slate-200 text-on-surface border border-outline-variant rounded font-semibold transition-all" id="preset-semantic">Semantic Near-Dup</button>
+<button class="px-2.5 py-1 text-xs font-label-code bg-surface-container hover:bg-slate-200 text-on-surface border border-outline-variant rounded font-semibold transition-all" id="preset-pii">PII Ingress</button>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-md pt-space-md">
+<!-- Left: Input Console -->
+<div class="lg:col-span-5 flex flex-col gap-space-sm">
+<div class="flex items-center justify-between font-label-code text-label-code text-on-surface-variant">
+<span class="font-bold">PROMPT INGRESS PAYLOAD</span>
+<span class="text-primary font-bold">POST /v1/chat/completions</span>
+</div>
+<textarea class="w-full bg-surface-container border border-outline rounded p-space-sm font-label-code text-label-code text-on-surface focus:outline-none focus:border-primary resize-none transition-all" id="sim-prompt-input" rows="5">Explain the differences between PostgreSQL B-tree indices and BRIN indices with query plans for 50M rows, user_ssn: 948-29-1092, billing card 4532-8921-0029-4912.</textarea>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-label-code text-label-code text-on-surface-variant">Model:</span>
+<span class="font-label-code text-label-code text-on-surface bg-surface-container-high px-2 py-0.5 rounded font-bold">gpt-4o</span>
+<span class="font-label-code text-label-code text-on-surface-variant ml-2">Sim:</span>
+<span class="font-label-code text-label-code text-primary bg-secondary-container px-2 py-0.5 rounded font-bold">0.90 threshold</span>
+</div>
+<button class="px-space-md py-space-xs bg-primary text-white hover:bg-tertiary font-label-code text-label-code uppercase tracking-wider font-bold rounded transition-all flex items-center gap-1.5" id="sim-fire-btn">
+<span class="material-symbols-outlined text-[16px]">play_arrow</span>
+                Execute Conduit
+              </button>
+</div>
+<!-- Drop-in Code Preview Tab -->
+<div class="bg-surface-container border border-outline-variant p-space-sm rounded mt-space-xs flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="font-label-code text-label-code text-on-surface-variant uppercase font-bold">1-LINE DROP-IN PROXY</span>
+<span class="font-label-code text-label-code text-primary font-bold">NO REFACTOR</span>
+</div>
+<pre class="font-label-code text-label-code text-on-surface overflow-x-auto"><code><span class="text-primary font-bold">from</span> openai <span class="text-primary font-bold">import</span> OpenAI
+
+client = OpenAI(
+  <span class="text-on-surface-variant font-bold">base_url</span>=<span class="text-blue-700">"https://gateway.cachemind.ai/v1"</span>,
+  <span class="text-on-surface-variant font-bold">api_key</span>=<span class="text-blue-700">"cm_live_9fa823d..."</span>
+)</code></pre>
+</div>
+</div>
+<!-- Right: Visualized Execution Stage & Telemetry Inspector -->
+<div class="lg:col-span-7 bg-surface-container border border-outline-variant rounded p-space-md flex flex-col justify-between gap-space-md">
+<div>
+<div class="flex items-center justify-between pb-space-xs border-b border-outline-variant">
+<span class="font-label-code text-label-code text-on-surface-variant uppercase font-bold">DISPATCH TELEMETRY TELEGRAPH</span>
+<span class="px-2.5 py-0.5 rounded bg-secondary-container border border-blue-200 text-primary font-label-code text-label-code flex items-center gap-1.5 font-bold" id="sim-status-pill">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                  L2_SEMANTIC_HIT (0.942 COSINE)
+                </span>
+</div>
+<!-- Animated Step Indicator Pipeline -->
+<div class="grid grid-cols-4 gap-2 my-space-sm text-center">
+<div class="p-2 rounded bg-white border border-outline-variant flex flex-col gap-1 transition-all" id="pipe-step-1">
+<span class="font-label-code text-label-code text-on-surface-variant">01: PII SCRUB</span>
+<span class="font-telemetry-data text-telemetry-data text-primary font-bold" id="pipe-val-1">2 Redacted</span>
+</div>
+<div class="p-2 rounded bg-white border border-outline-variant flex flex-col gap-1 transition-all" id="pipe-step-2">
+<span class="font-label-code text-label-code text-on-surface-variant">02: SHA-256</span>
+<span class="font-telemetry-data text-telemetry-data text-on-surface font-mono truncate" id="pipe-val-2">0x81b7e...</span>
+</div>
+<div class="p-2 rounded bg-white border border-outline-variant flex flex-col gap-1 transition-all" id="pipe-step-3">
+<span class="font-label-code text-label-code text-on-surface-variant">03: ONNX VECTOR</span>
+<span class="font-telemetry-data text-telemetry-data text-primary font-bold" id="pipe-val-3">384-dim FP16</span>
+</div>
+<div class="p-2 rounded bg-secondary-container border border-primary flex flex-col gap-1 transition-all" id="pipe-step-4">
+<span class="font-label-code text-label-code text-primary font-bold">04: EGRESS</span>
+<span class="font-telemetry-data text-telemetry-data text-primary font-bold" id="pipe-val-4">4.18 ms</span>
+</div>
+</div>
+<!-- Telemetry Output Payload Inspector -->
+<div class="bg-white border border-outline-variant p-space-sm rounded font-label-code text-label-code flex flex-col gap-2">
+<div class="text-on-surface-variant flex items-center justify-between border-b border-outline-variant pb-1">
+<span class="font-bold">SANITY OUTPUT LOG</span>
+<span class="text-primary font-bold">UPSTREAM TOKENS: 0 (SAVED)</span>
+</div>
+<div class="text-on-surface leading-relaxed text-xs" id="sim-output-stream">
+<span class="text-on-surface-variant">[00:00:00.002]</span> Ingress intercepted. SSN &amp; Luhn token masked with SHA-256 salts.<br/>
+<span class="text-on-surface-variant">[00:00:00.003]</span> FastEmbed ONNX embedding generated in 2.31ms.<br/>
+<span class="text-on-surface-variant">[00:00:00.004]</span> Cache Hit in shard #18 (score: <span class="text-primary font-bold">0.9423</span> &gt; thresh: 0.9000).<br/>
+<span class="text-primary font-bold">[00:00:00.004] Streaming instantaneous synthetic cached tokens to consumer SSE.</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between text-xs font-label-code text-on-surface-variant pt-2 border-t border-outline-variant">
+<span class="flex items-center gap-1 font-semibold"><span class="w-2 h-2 rounded-full bg-primary"></span> Cache Cost: $0.000000</span>
+<span class="text-error line-through">Provider Cost: $0.0428</span>
+<span class="text-primary font-bold">FinOps ROI: 100%</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ARCHITECTURE & REQUEST FLOW PIPELINE (8-STAGE CONDUIT) -->
+<section class="w-full bg-surface-dim py-space-xl px-margin sm:px-margin-tablet lg:px-gutter-desktop border-b border-outline-variant" id="pipeline">
+<div class="max-w-7xl mx-auto flex flex-col gap-space-lg">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-sm">
+<div>
+<div class="inline-flex items-center gap-2 text-primary font-label-code text-label-code uppercase tracking-widest font-bold">
+<span class="material-symbols-outlined text-[16px]">device_hub</span>
+            CONCURRENT HIGH-THROUGHPUT GRAPH
+          </div>
+<h2 class="font-headline-lg text-headline-lg uppercase text-on-surface tracking-tight mt-1">
+            Request Flow Topology &amp; Latency Arbiter
+          </h2>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-md">
+          Zero-PyTorch runtime architecture using C-bindings, quantized ONNX runtimes, and lockless atomic ring-buffers.
+        </p>
+</div>
+<!-- 8-STAGE INTERACTIVE NODES GRID -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-space-sm">
+<!-- Stage 1 -->
+<div class="group bg-white border border-outline-variant p-space-md rounded-xl hover:border-primary transition-all duration-200 flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-code text-label-code text-on-surface-variant font-bold">STAGE 01</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-primary font-label-code text-label-code font-bold">PORT 8000</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-2 font-bold">Ingress Ingestion</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              FastAPI uvloop non-blocking HTTP/2 ingress with zero-copy payload streaming and memory-mapped payload buffers.
+            </p>
+</div>
+<div class="pt-space-md flex items-center justify-between text-xs font-label-code text-primary font-bold">
+<span>&lt; 0.12ms INGEST</span>
+<span class="material-symbols-outlined text-[18px]">input</span>
+</div>
+</div>
+<!-- Stage 2 -->
+<div class="group bg-white border border-outline-variant p-space-md rounded-xl hover:border-primary transition-all duration-200 flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-code text-label-code text-on-surface-variant font-bold">STAGE 02</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-primary font-label-code text-label-code font-bold">AUTH VAULT</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-2 font-bold">Key Resolution</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Atomic SHA-256 API key hashing, tenant quota verification, and scope validation (`admin`, `inference`, `read_only`).
+            </p>
+</div>
+<div class="pt-space-md flex items-center justify-between text-xs font-label-code text-primary font-bold">
+<span>&lt; 0.08ms HASH</span>
+<span class="material-symbols-outlined text-[18px]">vpn_key</span>
+</div>
+</div>
+<!-- Stage 3 -->
+<div class="group bg-white border border-outline-variant p-space-md rounded-xl hover:border-primary transition-all duration-200 flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-code text-label-code text-on-surface-variant font-bold">STAGE 03</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-primary font-label-code text-label-code font-bold">SECURITY</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-2 font-bold">PII Sanitization</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Luhn-algorithm validated credit card redaction, regex-free token masking, SSN scrub, and RFC 5322 email shielding.
+            </p>
+</div>
+<div class="pt-space-md flex items-center justify-between text-xs font-label-code text-primary font-bold">
+<span>&lt; 0.25ms SCRUB</span>
+<span class="material-symbols-outlined text-[18px]">shield</span>
+</div>
+</div>
+<!-- Stage 4 -->
+<div class="group bg-white border border-outline-variant p-space-md rounded-xl hover:border-primary transition-all duration-200 flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-code text-label-code text-on-surface-variant font-bold">STAGE 04</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-primary font-label-code text-label-code font-bold">L1 ENGINE</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-2 font-bold">Deterministic Fingerprint</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Canonical whitespace normalization, temperature-zero validation, and instant in-memory Redis/RocksDB fingerprint lookup.
+            </p>
+</div>
+<div class="pt-space-md flex items-center justify-between text-xs font-label-code text-primary font-bold">
+<span>0.85ms P99 HIT</span>
+<span class="material-symbols-outlined text-[18px]">flash_on</span>
+</div>
+</div>
+<!-- Stage 5 -->
+<div class="group bg-white border border-outline-variant p-space-md rounded-xl hover:border-primary transition-all duration-200 flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-code text-label-code text-on-surface-variant font-bold">STAGE 05</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-primary font-label-code text-label-code font-bold">L2 ONNX</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-2 font-bold">FastEmbed Vector Scan</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              BAAI/bge-small-en-v1.5 quantization. Cosine similarity query on HNSW index. Configurable threshold default: 0.90.
+            </p>
+</div>
+<div class="pt-space-md flex items-center justify-between text-xs font-label-code text-primary font-bold">
+<span>4.20ms QUANTIZED</span>
+<span class="material-symbols-outlined text-[18px]">hub</span>
+</div>
+</div>
+<!-- Stage 6 -->
+<div class="group bg-white border border-outline-variant p-space-md rounded-xl hover:border-primary transition-all duration-200 flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-code text-label-code text-on-surface-variant font-bold">STAGE 06</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-primary font-label-code text-label-code font-bold">VOLATILITY</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-2 font-bold">Guardrail Arbiter</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Dynamic TTL expiry enforcement, semantic drift prevention, and temporal validation for real-time market data payloads.
+            </p>
+</div>
+<div class="pt-space-md flex items-center justify-between text-xs font-label-code text-primary font-bold">
+<span>&lt; 0.15ms CHECK</span>
+<span class="material-symbols-outlined text-[18px]">verified_user</span>
+</div>
+</div>
+<!-- Stage 7 -->
+<div class="group bg-white border border-outline-variant p-space-md rounded-xl hover:border-primary transition-all duration-200 flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-code text-label-code text-on-surface-variant font-bold">STAGE 07</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-primary font-label-code text-label-code font-bold">FALLBACK</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-2 font-bold">Multi-Provider Router</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              On cache miss: Automatic proxying to OpenAI, Anthropic, or self-hosted Ollama clusters with built-in circuit breakers.
+            </p>
+</div>
+<div class="pt-space-md flex items-center justify-between text-xs font-label-code text-primary font-bold">
+<span>1.5ms OVERHEAD</span>
+<span class="material-symbols-outlined text-[18px]">alt_route</span>
+</div>
+</div>
+<!-- Stage 8 -->
+<div class="group bg-white border border-outline-variant p-space-md rounded-xl hover:border-primary transition-all duration-200 flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-code text-label-code text-on-surface-variant font-bold">STAGE 08</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-primary font-label-code text-label-code font-bold">STREAM REPLAY</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-2 font-bold">SSE Egress Streaming</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Instantly chunks cached completions into Server-Sent Events (SSE) tokens, maintaining 100% downstream client compatibility.
+            </p>
+</div>
+<div class="pt-space-md flex items-center justify-between text-xs font-label-code text-primary font-bold">
+<span>ZERO CLIENT DELAY</span>
+<span class="material-symbols-outlined text-[18px]">stream</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- PERFORMANCE & LATENCY SLAS COMPARISON MATRIX -->
+<section class="w-full bg-background py-space-xl px-margin sm:px-margin-tablet lg:px-gutter-desktop border-b border-outline-variant" id="benchmarks">
+<div class="max-w-7xl mx-auto flex flex-col gap-space-lg">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-sm">
+<div>
+<div class="inline-flex items-center gap-2 text-primary font-label-code text-label-code uppercase tracking-widest font-bold">
+<span class="material-symbols-outlined text-[16px]">speed</span>
+            EMPIRICAL VALIDATION BENCHMARKS
+          </div>
+<h2 class="font-headline-lg text-headline-lg uppercase text-on-surface tracking-tight mt-1">
+            Performance Matrix &amp; SLA Comparison
+          </h2>
+</div>
+<div class="text-right">
+<span class="font-label-code text-label-code text-primary font-bold bg-secondary-container px-2 py-1 rounded border border-blue-200">TEST ENVIRONMENT: AWS c6i.4xlarge (16 vCPU, 32GB RAM)</span>
+</div>
+</div>
+<!-- SLA Comparison Data Table -->
+<div class="overflow-x-auto rounded-xl bg-white border border-outline-variant">
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead class="bg-surface-container font-label-code text-label-code text-on-surface-variant uppercase border-b border-outline-variant">
+<tr>
+<th class="py-space-sm px-space-md font-bold">Execution Pathway</th>
+<th class="py-space-sm px-space-md font-bold">CacheMind Latency</th>
+<th class="py-space-sm px-space-md font-bold">Standard LLM API</th>
+<th class="py-space-sm px-space-md font-bold">Speedup Multiple</th>
+<th class="py-space-sm px-space-md font-bold">Token Cost / Query</th>
+<th class="py-space-sm px-space-md text-right font-bold">FinOps Status</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container/50 transition-colors">
+<td class="py-space-sm px-space-md font-semibold text-on-surface flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span>L1 Exact Cache Hit</span>
+<span class="text-xs text-on-surface-variant font-label-code">[SHA-256 match]</span>
+</td>
+<td class="py-space-sm px-space-md font-telemetry-data text-telemetry-data text-primary font-bold">0.85 ms</td>
+<td class="py-space-sm px-space-md font-telemetry-data text-telemetry-data text-on-surface-variant">1,200.00 ms</td>
+<td class="py-space-sm px-space-md">
+<span class="px-2 py-0.5 rounded bg-secondary-container border border-blue-200 text-primary font-label-code text-label-code font-bold">&gt; 1,400x FASTER</span>
+</td>
+<td class="py-space-sm px-space-md font-telemetry-data text-telemetry-data text-primary font-bold">$0.000000</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-primary font-bold">100% SAVED</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container/50 transition-colors">
+<td class="py-space-sm px-space-md font-semibold text-on-surface flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span>L2 Semantic Hit</span>
+<span class="text-xs text-on-surface-variant font-label-code">[bge-small-en-v1.5]</span>
+</td>
+<td class="py-space-sm px-space-md font-telemetry-data text-telemetry-data text-secondary font-bold">4.20 ms</td>
+<td class="py-space-sm px-space-md font-telemetry-data text-telemetry-data text-on-surface-variant">1,200.00 ms</td>
+<td class="py-space-sm px-space-md">
+<span class="px-2 py-0.5 rounded bg-secondary-container border border-blue-200 text-secondary font-label-code text-label-code font-bold">&gt; 280x FASTER</span>
+</td>
+<td class="py-space-sm px-space-md font-telemetry-data text-telemetry-data text-primary font-bold">$0.000000</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-primary font-bold">100% SAVED</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container/50 transition-colors">
+<td class="py-space-sm px-space-md font-semibold text-on-surface flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-outline"></span>
+<span>Cold Cache Miss</span>
+<span class="text-xs text-on-surface-variant font-label-code">[Proxy Pass-through]</span>
+</td>
+<td class="py-space-sm px-space-md font-telemetry-data text-telemetry-data text-on-surface">1,201.50 ms</td>
+<td class="py-space-sm px-space-md font-telemetry-data text-telemetry-data text-on-surface-variant">1,200.00 ms</td>
+<td class="py-space-sm px-space-md">
+<span class="px-2 py-0.5 rounded bg-surface-container border border-outline text-on-surface-variant font-label-code text-label-code">1.5ms OVERHEAD</span>
+</td>
+<td class="py-space-sm px-space-md font-telemetry-data text-telemetry-data text-on-surface-variant">$0.042800</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-on-surface-variant">NEGLIGIBLE DELTA</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Latency Distribution Histogram Visualizer -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-md bg-white border border-outline-variant p-space-md rounded-xl">
+<div class="lg:col-span-4 flex flex-col justify-between gap-space-sm">
+<div>
+<div class="font-label-code text-label-code text-primary uppercase font-bold">DISTRIBUTION PROFILE</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mt-1 font-bold">Sub-10ms Tail Latency</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-2">
+              FastEmbed ONNX execution operates entirely on pre-allocated vector tensors without PyTorch thread-pool contention or GPU VRAM context swaps.
+            </p>
+</div>
+<div class="space-y-2 border-t border-outline-variant pt-space-sm">
+<div class="flex justify-between font-label-code text-label-code">
+<span class="text-on-surface-variant">P50 Latency:</span>
+<span class="text-primary font-bold">1.02 ms</span>
+</div>
+<div class="flex justify-between font-label-code text-label-code">
+<span class="text-on-surface-variant">P90 Latency:</span>
+<span class="text-secondary font-bold">3.88 ms</span>
+</div>
+<div class="flex justify-between font-label-code text-label-code">
+<span class="text-on-surface-variant">P99 Latency:</span>
+<span class="text-tertiary font-bold">6.14 ms</span>
+</div>
+</div>
+</div>
+<!-- SVG Histogram Chart -->
+<div class="lg:col-span-8 flex flex-col justify-end">
+<div class="flex items-center justify-between font-label-code text-label-code text-on-surface-variant pb-2 border-b border-outline-variant">
+<span class="font-bold">REQUEST FREQUENCY (N = 1,000,000)</span>
+<span class="font-bold">LATENCY BUCKET (MS)</span>
+</div>
+<div class="w-full h-44 bg-surface-container border border-outline-variant rounded-lg p-3 flex items-end gap-1.5 sm:gap-2 mt-3">
+<!-- Histogram Bars -->
+<div class="flex-1 bg-primary rounded-t h-[94%] relative group" title="&lt;1ms: 480k hits">
+<div class="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-7 left-1/2 -translate-x-1/2 font-label-code text-[10px] bg-white border border-outline px-1.5 py-0.5 rounded text-primary font-bold whitespace-nowrap shadow-sm">0.8ms (48%)</div>
+</div>
+<div class="flex-1 bg-blue-600 rounded-t h-[75%] relative group">
+<div class="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-7 left-1/2 -translate-x-1/2 font-label-code text-[10px] bg-white border border-outline px-1.5 py-0.5 rounded text-primary font-bold whitespace-nowrap shadow-sm">1.5ms (24%)</div>
+</div>
+<div class="flex-1 bg-blue-500 rounded-t h-[42%] relative group">
+<div class="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-7 left-1/2 -translate-x-1/2 font-label-code text-[10px] bg-white border border-outline px-1.5 py-0.5 rounded text-primary font-bold whitespace-nowrap shadow-sm">3.2ms (12%)</div>
+</div>
+<div class="flex-1 bg-blue-400 rounded-t h-[28%] relative group">
+<div class="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-7 left-1/2 -translate-x-1/2 font-label-code text-[10px] bg-white border border-outline px-1.5 py-0.5 rounded text-primary font-bold whitespace-nowrap shadow-sm">4.8ms (7%)</div>
+</div>
+<div class="flex-1 bg-blue-300 rounded-t h-[14%] relative group">
+<div class="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-7 left-1/2 -translate-x-1/2 font-label-code text-[10px] bg-white border border-outline px-1.5 py-0.5 rounded text-primary font-bold whitespace-nowrap shadow-sm">6.5ms (4%)</div>
+</div>
+<div class="flex-1 bg-slate-400 rounded-t h-[8%] relative group">
+<div class="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-7 left-1/2 -translate-x-1/2 font-label-code text-[10px] bg-white border border-outline px-1.5 py-0.5 rounded text-on-surface font-bold whitespace-nowrap shadow-sm">8.0ms (2%)</div>
+</div>
+<div class="flex-1 bg-slate-300 rounded-t h-[4%] relative group">
+<div class="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-7 left-1/2 -translate-x-1/2 font-label-code text-[10px] bg-white border border-outline px-1.5 py-0.5 rounded text-on-surface font-bold whitespace-nowrap shadow-sm">&gt;12ms (1%)</div>
+</div>
+</div>
+<div class="flex justify-between font-label-code text-[10px] text-on-surface-variant mt-2 px-1 font-semibold">
+<span>&lt;0.8ms (L1 Exact)</span>
+<span>2.5ms</span>
+<span>4.2ms (L2 Semantic)</span>
+<span>8.0ms</span>
+<span>&gt;10ms (Cold Pass)</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ENTERPRISE PII GATEWAY & SECURITY SANDBOX -->
+<section class="w-full bg-surface-dim py-space-xl px-margin sm:px-margin-tablet lg:px-gutter-desktop border-b border-outline-variant" id="pii-guardrails">
+<div class="max-w-7xl mx-auto flex flex-col gap-space-lg">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-sm">
+<div>
+<div class="inline-flex items-center gap-2 text-primary font-label-code text-label-code uppercase tracking-widest font-bold">
+<span class="material-symbols-outlined text-[16px]">lock</span>
+            ZERO-LEAKAGE PRIVACY ENCLAVE
+          </div>
+<h2 class="font-headline-lg text-headline-lg uppercase text-on-surface tracking-tight mt-1">
+            PII Redaction Engine &amp; Guardrails
+          </h2>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-2.5 py-1 rounded bg-white border border-outline-variant font-label-code text-label-code text-on-surface font-bold">SOC-2 Type II</span>
+<span class="px-2.5 py-1 rounded bg-white border border-outline-variant font-label-code text-label-code text-on-surface font-bold">HIPAA BAA Ready</span>
+<span class="px-2.5 py-1 rounded bg-secondary-container border border-blue-200 font-label-code text-label-code text-primary font-bold">Zero-Trust Key Scoping</span>
+</div>
+</div>
+<!-- Interactive Raw vs Sanitized Comparator -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-space-md">
+<!-- Raw Ingress Pane -->
+<div class="bg-white border border-red-200 rounded-xl p-space-md flex flex-col gap-space-sm">
+<div class="flex items-center justify-between pb-space-xs border-b border-red-100">
+<div class="flex items-center gap-2 font-label-code text-label-code text-error font-bold">
+<span class="material-symbols-outlined text-[16px]">warning</span>
+              RAW CLIENT INGRESS [UNSANITIZED]
+            </div>
+<span class="font-label-code text-label-code text-error font-bold">VULNERABILITY LEVEL: CRITICAL</span>
+</div>
+<div class="bg-red-50/50 border border-red-100 p-space-sm rounded font-label-code text-label-code text-on-surface leading-relaxed min-h-[160px]">
+            Execute customer lookup for account: <span class="bg-red-200 text-red-900 px-1 rounded font-bold">alice.dev@ausdata.io</span>.<br/>
+            Attached SSN identifier: <span class="bg-red-200 text-red-900 px-1 rounded font-bold">042-89-2910</span>.<br/>
+            Active corporate card: <span class="bg-red-200 text-red-900 px-1 rounded font-bold">4000-1234-5678-9010</span> (Luhn Valid).<br/>
+            Provisioned OpenAI fallback key: <span class="bg-red-200 text-red-900 px-1 rounded font-bold">sk-proj-9A841B981C0248...</span>
+</div>
+<div class="text-xs font-label-code text-on-surface-variant font-medium">
+            Directly relaying this payload to external cloud providers triggers immediate compliance breach.
+          </div>
+</div>
+<!-- Sanitized & Caching Pane -->
+<div class="bg-white border border-blue-300 rounded-xl p-space-md flex flex-col gap-space-sm">
+<div class="flex items-center justify-between pb-space-xs border-b border-blue-100">
+<div class="flex items-center gap-2 font-label-code text-label-code text-primary font-bold">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+              CACHEMIND SANITIZED &amp; QUANTIZED RECURSION
+            </div>
+<span class="font-label-code text-label-code text-primary font-bold">100% REGEX &amp; LUHN SAFE</span>
+</div>
+<div class="bg-secondary-container border border-blue-200 p-space-sm rounded font-label-code text-label-code text-on-surface leading-relaxed min-h-[160px]">
+            Execute customer lookup for account: <span class="bg-blue-200 text-blue-900 px-1.5 py-0.5 rounded font-bold">&lt;EMAIL_REDACTED_0x4F&gt;</span>.<br/>
+            Attached SSN identifier: <span class="bg-blue-200 text-blue-900 px-1.5 py-0.5 rounded font-bold">&lt;GOV_ID_REDACTED_0x9A&gt;</span>.<br/>
+            Active corporate card: <span class="bg-blue-200 text-blue-900 px-1.5 py-0.5 rounded font-bold">&lt;CARD_LUHN_PASS_0x1B&gt;</span>.<br/>
+            Provisioned OpenAI fallback key: <span class="bg-blue-200 text-blue-900 px-1.5 py-0.5 rounded font-bold">&lt;SECRET_TOKEN_REDACTED&gt;</span>.
+          </div>
+<div class="text-xs font-label-code text-primary flex items-center justify-between font-bold">
+<span>Masking reversible only for authorized caller session context.</span>
+<span class="bg-blue-100 px-1.5 py-0.5 rounded">0.24ms OVERHEAD</span>
+</div>
+</div>
+</div>
+<!-- Scoped Access Control Architecture -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-sm pt-space-xs">
+<div class="p-space-sm bg-white border border-outline-variant rounded-lg flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-code text-label-code text-primary uppercase font-bold">admin Key Scope</span>
+<span class="material-symbols-outlined text-[16px] text-primary">admin_panel_settings</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Cluster configuration, vector partition re-indexing, cache invalidation &amp; audit inspection.</p>
+</div>
+<div class="p-space-sm bg-white border border-outline-variant rounded-lg flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-code text-label-code text-primary uppercase font-bold">inference Key Scope</span>
+<span class="material-symbols-outlined text-[16px] text-primary">neurology</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">High-throughput routing, semantic lookups, L1 fingerprinting, and automated provider fallback.</p>
+</div>
+<div class="p-space-sm bg-white border border-outline-variant rounded-lg flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-code text-label-code text-primary uppercase font-bold">read_only Key Scope</span>
+<span class="material-symbols-outlined text-[16px] text-primary">analytics</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Telemetry streaming, FinOps delta inspection, Prometheus metrics scraping at `/metrics`.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- QUICKSTART & DEVELOPER EXPERIENCE -->
+<section class="w-full bg-background py-space-xl px-margin sm:px-margin-tablet lg:px-gutter-desktop border-b border-outline-variant" id="quickstart">
+<div class="max-w-7xl mx-auto flex flex-col gap-space-lg">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-sm">
+<div>
+<div class="inline-flex items-center gap-2 text-primary font-label-code text-label-code uppercase tracking-widest font-bold">
+<span class="material-symbols-outlined text-[16px]">terminal</span>
+            DEPLOY IN 60 SECONDS
+          </div>
+<h2 class="font-headline-lg text-headline-lg uppercase text-on-surface tracking-tight mt-1">
+            Drop-in Integration SDKs
+          </h2>
+</div>
+<div class="flex items-center gap-3">
+<span class="font-label-code text-label-code text-on-surface-variant font-bold">ZERO PYTORCH OVERHEAD</span>
+<span class="text-outline">•</span>
+<span class="font-label-code text-label-code text-primary font-bold">106 / 106 TESTS PASSED</span>
+</div>
+</div>
+<!-- Docker Compose 1-Liner Callout -->
+<div class="bg-white border border-outline-variant rounded-xl p-space-md flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded bg-secondary-container text-primary flex items-center justify-center font-bold">
+<span class="material-symbols-outlined">rocket_launch</span>
+</div>
+<div>
+<div class="font-label-code text-label-code text-on-surface-variant uppercase font-bold">DOCKER COMPOSE ONE-LINER</div>
+<div class="font-label-code text-label-code text-on-surface font-semibold mt-0.5">Spin up complete standalone edge gateway with FastEmbed ONNX &amp; L1 memory store</div>
+</div>
+</div>
+<div class="flex items-center gap-2 bg-surface-container border border-outline px-space-md py-space-xs rounded">
+<code class="font-label-code text-label-code text-primary font-bold" id="docker-cmd">docker compose up -d --build</code>
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1" onclick="copyToClipboard('docker-cmd')" title="Copy to clipboard">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+</button>
+</div>
+</div>
+<!-- Multi-Language SDK Tabs & Code Container -->
+<div class="bg-white border border-outline-variant rounded-xl overflow-hidden">
+<!-- Tab Navigation Bar -->
+<div class="flex items-center gap-1 bg-surface-container px-space-md pt-space-xs border-b border-outline-variant overflow-x-auto">
+<button class="px-space-md py-2 font-label-code text-label-code rounded-t transition-all bg-white text-primary font-bold border-t-2 border-primary" id="tab-btn-python" onclick="switchTab('python')">Python (OpenAI SDK)</button>
+<button class="px-space-md py-2 font-label-code text-label-code rounded-t transition-all text-on-surface-variant hover:text-primary" id="tab-btn-ts" onclick="switchTab('ts')">TypeScript / Node</button>
+<button class="px-space-md py-2 font-label-code text-label-code rounded-t transition-all text-on-surface-variant hover:text-primary" id="tab-btn-langchain" onclick="switchTab('langchain')">LangChain</button>
+<button class="px-space-md py-2 font-label-code text-label-code rounded-t transition-all text-on-surface-variant hover:text-primary" id="tab-btn-curl" onclick="switchTab('curl')">cURL Stream</button>
+</div>
+<!-- Tab Contents -->
+<div class="p-space-md bg-white relative">
+<!-- Python Tab Content -->
+<div class="space-y-4" id="tab-pane-python">
+<div class="flex items-center justify-between text-xs font-label-code text-on-surface-variant border-b border-outline-variant pb-2">
+<span class="font-bold">PYTHON 3.10+ // ZERO SDK CHANGE REQUIRED</span>
+<button class="text-primary hover:underline flex items-center gap-1 font-label-code text-label-code font-bold" onclick="copyToClipboard('code-python')">
+<span class="material-symbols-outlined text-[14px]">content_copy</span> Copy Snippet
+              </button>
+</div>
+<pre class="font-label-code text-label-code text-on-surface overflow-x-auto leading-relaxed"><code id="code-python"><span class="text-on-surface-variant"># 1. Point standard OpenAI client to local or VPC CacheMind gateway</span>
+<span class="text-primary font-bold">import</span> os
+<span class="text-primary font-bold">from</span> openai <span class="text-primary font-bold">import</span> OpenAI
+
+client = OpenAI(
+    base_url=<span class="text-blue-700">"http://localhost:8000/v1"</span>,
+    api_key=os.environ.get(<span class="text-blue-700">"CACHEMIND_API_KEY"</span>, <span class="text-blue-700">"cm_live_79a29..."</span>)
+)
+
+<span class="text-on-surface-variant"># 2. Transparent execution: First call miss (1,200ms), second identical or semantic call hits (&lt;2ms)</span>
+response = client.chat.completions.create(
+    model=<span class="text-blue-700">"gpt-4o"</span>,
+    messages=[{<span class="text-blue-700">"role"</span>: <span class="text-blue-700">"user"</span>, <span class="text-blue-700">"content"</span>: <span class="text-blue-700">"Synthesize high-frequency arbitrage risk parameters."</span>}],
+    temperature=<span class="text-on-surface font-bold">0.0</span>,
+    extra_body={<span class="text-blue-700">"cachemind"</span>: {<span class="text-blue-700">"threshold"</span>: <span class="text-on-surface font-bold">0.92</span>, <span class="text-blue-700">"ttl"</span>: <span class="text-on-surface font-bold">86400</span>}}
+)
+
+<span class="text-primary font-bold">print</span>(response.choices[<span class="text-on-surface font-bold">0</span>].message.content)
+<span class="text-on-surface-variant"># Header telemetry: response._headers['x-cachemind-hit'] -&gt; 'L2_SEMANTIC'</span></code></pre>
+</div>
+<!-- TypeScript Tab Content -->
+<div class="space-y-4 hidden" id="tab-pane-ts">
+<div class="flex items-center justify-between text-xs font-label-code text-on-surface-variant border-b border-outline-variant pb-2">
+<span class="font-bold">NODE.JS / EDGE RUNTIMES</span>
+<button class="text-primary hover:underline flex items-center gap-1 font-label-code text-label-code font-bold" onclick="copyToClipboard('code-ts')">
+<span class="material-symbols-outlined text-[14px]">content_copy</span> Copy Snippet
+              </button>
+</div>
+<pre class="font-label-code text-label-code text-on-surface overflow-x-auto leading-relaxed"><code id="code-ts"><span class="text-primary font-bold">import</span> OpenAI <span class="text-primary font-bold">from</span> <span class="text-blue-700">'openai'</span>;
+
+<span class="text-primary font-bold">const</span> openai = <span class="text-primary font-bold">new</span> OpenAI({
+  baseURL: <span class="text-blue-700">'http://localhost:8000/v1'</span>,
+  apiKey: process.env.CACHEMIND_API_KEY,
+});
+
+<span class="text-primary font-bold">async function</span> <span class="text-blue-700 font-bold">query</span>() {
+  <span class="text-primary font-bold">const</span> completion = <span class="text-primary font-bold">await</span> openai.chat.completions.create({
+    model: <span class="text-blue-700">'gpt-4o'</span>,
+    messages: [{ role: <span class="text-blue-700">'user'</span>, content: <span class="text-blue-700">'Explain quantized vector spaces'</span> }],
+    stream: <span class="text-on-surface font-bold">true</span>,
+  });
+
+  <span class="text-primary font-bold">for await</span> (<span class="text-primary font-bold">const</span> chunk <span class="text-primary font-bold">of</span> completion) {
+    process.stdout.write(chunk.choices[0]?.delta?.content || <span class="text-blue-700">''</span>);
+  }
+}</code></pre>
+</div>
+<!-- LangChain Tab Content -->
+<div class="space-y-4 hidden" id="tab-pane-langchain">
+<div class="flex items-center justify-between text-xs font-label-code text-on-surface-variant border-b border-outline-variant pb-2">
+<span class="font-bold">LANGCHAIN / LLAMAINDEX COMPATIBLE</span>
+<button class="text-primary hover:underline flex items-center gap-1 font-label-code text-label-code font-bold" onclick="copyToClipboard('code-langchain')">
+<span class="material-symbols-outlined text-[14px]">content_copy</span> Copy Snippet
+              </button>
+</div>
+<pre class="font-label-code text-label-code text-on-surface overflow-x-auto leading-relaxed"><code id="code-langchain"><span class="text-primary font-bold">from</span> langchain_openai <span class="text-primary font-bold">import</span> ChatOpenAI
+
+llm = ChatOpenAI(
+    model=<span class="text-blue-700">"gpt-4o"</span>,
+    openai_api_base=<span class="text-blue-700">"http://localhost:8000/v1"</span>,
+    openai_api_key=<span class="text-blue-700">"cm_live_9fa..."</span>
+)
+
+res = llm.invoke(<span class="text-blue-700">"Vector quantization trade-offs"</span>)
+<span class="text-primary font-bold">print</span>(res.content)</code></pre>
+</div>
+<!-- cURL Tab Content -->
+<div class="space-y-4 hidden" id="tab-pane-curl">
+<div class="flex items-center justify-between text-xs font-label-code text-on-surface-variant border-b border-outline-variant pb-2">
+<span class="font-bold">CLI / BASH INTEGRATION</span>
+<button class="text-primary hover:underline flex items-center gap-1 font-label-code text-label-code font-bold" onclick="copyToClipboard('code-curl')">
+<span class="material-symbols-outlined text-[14px]">content_copy</span> Copy Snippet
+              </button>
+</div>
+<pre class="font-label-code text-label-code text-on-surface overflow-x-auto leading-relaxed"><code id="code-curl">curl http://localhost:8000/v1/chat/completions \
+  -H <span class="text-blue-700">"Content-Type: application/json"</span> \
+  -H <span class="text-blue-700">"Authorization: Bearer cm_live_09fa82"</span> \
+  -d <span class="text-blue-700">'{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Ping gateway"}]
+  }'</span></code></pre>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- FINAL CALLOUT & METRIC SUMMARY -->
+<section class="w-full bg-surface-dim py-space-xl px-margin sm:px-margin-tablet lg:px-gutter-desktop">
+<div class="max-w-7xl mx-auto bg-white border border-outline-variant rounded-2xl p-space-lg lg:p-space-xl flex flex-col items-center text-center gap-space-md">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary-container border border-blue-200 text-primary font-label-code text-label-code uppercase tracking-wider font-bold">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+        ZERO DOWNTIME UPGRADE PATH
+      </div>
+<h2 class="font-display-hero text-headline-lg sm:text-display-hero uppercase tracking-tight text-on-surface max-w-3xl font-bold">
+        Reclaim 80% of your AI budget before tomorrow's deploy.
+      </h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">
+        Deploy CacheMind within your existing VPC or Kubernetes cluster. Zero cloud lock-in, open architecture, verified deterministic SLA performance.
+      </p>
+<div class="flex flex-wrap items-center justify-center gap-space-md pt-space-sm">
+<a class="px-space-lg py-space-sm bg-primary border border-primary text-white hover:bg-tertiary font-label-code text-label-code uppercase tracking-wider font-bold rounded transition-all" href="#quickstart">
+          Deploy Local Node
+        </a>
+<a class="px-space-lg py-space-sm bg-surface-container border border-outline text-on-surface hover:border-primary hover:text-primary font-label-code text-label-code uppercase tracking-wider font-semibold rounded transition-all" href="#">
+          Read Whitepaper (PDF)
+        </a>
+</div>
+</div>
+</section>
+<!-- INTERACTIVE CLIENT-SIDE SIMULATOR SCRIPT -->
+<script>
+    // Tab Switching Micro-interaction
+    function switchTab(tab) {
+      const tabs = ['python', 'ts', 'langchain', 'curl'];
+      tabs.forEach(t => {
+        const pane = document.getElementById('tab-pane-' + t);
+        const btn = document.getElementById('tab-btn-' + t);
+        if (t === tab) {
+          pane.classList.remove('hidden');
+          btn.classList.add('bg-white', 'text-primary', 'font-bold', 'border-t-2', 'border-primary');
+          btn.classList.remove('text-on-surface-variant');
+        } else {
+          pane.classList.add('hidden');
+          btn.classList.remove('bg-white', 'text-primary', 'font-bold', 'border-t-2', 'border-primary');
+          btn.classList.add('text-on-surface-variant');
+        }
+      });
+    }
+
+    // Clipboard Copy Helper
+    function copyToClipboard(elementId) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      const text = el.innerText || el.textContent;
+      navigator.clipboard.writeText(text);
+    }
+
+    // Dynamic Station Epoch Clock
+    setInterval(() => {
+      const epochEl = document.getElementById('epoch-timer');
+      if (epochEl) {
+        epochEl.innerText = (Date.now() / 1000).toFixed(3);
+      }
+    }, 120);
+
+    // Interactive Query Simulator Logic
+    const promptInput = document.getElementById('sim-prompt-input');
+    const simFireBtn = document.getElementById('sim-fire-btn');
+    const simStatusPill = document.getElementById('sim-status-pill');
+    const simOutputStream = document.getElementById('sim-output-stream');
+
+    const pipeStep1 = document.getElementById('pipe-step-1');
+    const pipeStep2 = document.getElementById('pipe-step-2');
+    const pipeStep3 = document.getElementById('pipe-step-3');
+    const pipeStep4 = document.getElementById('pipe-step-4');
+
+    const pipeVal1 = document.getElementById('pipe-val-1');
+    const pipeVal2 = document.getElementById('pipe-val-2');
+    const pipeVal3 = document.getElementById('pipe-val-3');
+    const pipeVal4 = document.getElementById('pipe-val-4');
+
+    // Preset Buttons
+    document.getElementById('preset-exact')?.addEventListener('click', () => {
+      promptInput.value = "What is the computational complexity of Dijkstra algorithm on dense graphs?";
+      triggerSimulation('exact');
+    });
+
+    document.getElementById('preset-semantic')?.addEventListener('click', () => {
+      promptInput.value = "Can you outline the time complexity for Dijkstra shortest path using adjacency matrix?";
+      triggerSimulation('semantic');
+    });
+
+    document.getElementById('preset-pii')?.addEventListener('click', () => {
+      promptInput.value = "Validate transfer authorization for account holder SSN 049-21-9981 with corporate Visa 4111-2222-3333-4444.";
+      triggerSimulation('pii');
+    });
+
+    simFireBtn?.addEventListener('click', () => {
+      triggerSimulation('generic');
+    });
+
+    function triggerSimulation(mode) {
+      simFireBtn.disabled = true;
+      simFireBtn.classList.add('opacity-50');
+
+      // Reset Pipeline indicators
+      [pipeStep1, pipeStep2, pipeStep3, pipeStep4].forEach(el => {
+        el.className = "p-2 rounded bg-white border border-outline-variant flex flex-col gap-1 transition-all";
+      });
+
+      simOutputStream.innerHTML = '<span class="text-primary font-bold">[INGRESS] Ingesting prompt vector... parsing schema tokens</span>';
+
+      setTimeout(() => {
+        // Step 1
+        pipeStep1.className = "p-2 rounded bg-secondary-container border border-primary flex flex-col gap-1 transition-all";
+        const hasPii = promptInput.value.includes('SSN') || promptInput.value.includes('card') || promptInput.value.includes('Visa') || promptInput.value.includes('user_ssn');
+        pipeVal1.innerText = hasPii ? "2 Tokens Masked" : "0 Redactions";
+        simOutputStream.innerHTML += '<br><span class="text-primary font-bold">[00:00:00.001] Ingress PII scrub complete. Luhn checksums evaluated.</span>';
+      }, 150);
+
+      setTimeout(() => {
+        // Step 2
+        pipeStep2.className = "p-2 rounded bg-secondary-container border border-primary flex flex-col gap-1 transition-all";
+        pipeVal2.innerText = "0x" + Math.random().toString(16).substring(2, 8);
+        simOutputStream.innerHTML += '<br><span class="text-on-surface-variant font-bold">[00:00:00.002] Deterministic SHA-256 fingerprint generated.</span>';
+      }, 300);
+
+      setTimeout(() => {
+        // Step 3
+        pipeStep3.className = "p-2 rounded bg-secondary-container border border-primary flex flex-col gap-1 transition-all";
+        simOutputStream.innerHTML += '<br><span class="text-primary font-bold">[00:00:00.003] FastEmbed BAAI/bge-small-en-v1.5 ONNX execution complete.</span>';
+      }, 450);
+
+      setTimeout(() => {
+        // Step 4 Egress
+        pipeStep4.className = "p-2 rounded bg-primary text-white border border-primary flex flex-col gap-1 transition-all";
+        
+        if (mode === 'exact') {
+          pipeVal4.innerText = "0.85 ms";
+          simStatusPill.className = "px-2.5 py-0.5 rounded bg-secondary-container border border-blue-200 text-primary font-label-code text-label-code flex items-center gap-1.5 font-bold";
+          simStatusPill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-primary"></span> L1_EXACT_HIT (1.000 SHA)';
+          simOutputStream.innerHTML += '<br><span class="text-primary font-bold">[00:00:00.000] L1 EXACT CACHE MATCH! Zero Upstream Cost ($0.0000). Serving SSE stream.</span>';
+        } else if (mode === 'pii') {
+          pipeVal4.innerText = "1.12 ms";
+          simStatusPill.className = "px-2.5 py-0.5 rounded bg-blue-100 border border-blue-300 text-blue-900 font-label-code text-label-code flex items-center gap-1.5 font-bold";
+          simStatusPill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-primary"></span> PII_SECURED_QUERY';
+          simOutputStream.innerHTML += '<br><span class="text-primary font-bold">[00:00:00.001] Payload Scrubbed: Sensitive credentials replaced with volatile UUID anchors.</span>';
+        } else {
+          pipeVal4.innerText = "4.20 ms";
+          simStatusPill.className = "px-2.5 py-0.5 rounded bg-secondary-container border border-blue-200 text-primary font-label-code text-label-code flex items-center gap-1.5 font-bold";
+          simStatusPill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-primary"></span> L2_SEMANTIC_HIT (0.938 COSINE)';
+          simOutputStream.innerHTML += '<br><span class="text-primary font-bold">[00:00:00.004] L2 FastEmbed Cosine Match 0.938 &gt; 0.900 threshold. 100% tokens saved.</span>';
+        }
+
+        simFireBtn.disabled = false;
+        simFireBtn.classList.remove('opacity-50');
+      }, 600);
+    }
+  </script>
+</div></main><footer class="w-full bg-surface-dim border-t border-outline-variant"><div class="w-full px-gutter-desktop py-space-xl flex flex-col gap-space-lg"><div class="grid grid-cols-1 md:grid-cols-4 gap-space-lg"><div class="flex flex-col gap-space-sm"><div class="flex items-center gap-space-sm"><span class="font-headline-sm text-headline-sm uppercase text-on-surface font-bold">CacheMind</span><span class="font-label-code text-label-code text-primary font-bold">v4.8.2-PROD</span></div><p class="font-body-sm text-body-sm text-on-surface-variant">Enterprise semantic routing, zero-latency vector quantization, and hardware-accelerated proxy infrastructure for autonomous agent pipelines.</p></div><div class="flex flex-col gap-space-xs"><span class="font-label-code text-label-code uppercase text-primary font-bold">Telemetry Conduit</span><div class="font-telemetry-data text-telemetry-data text-on-surface">LATENCY AVG: 1.18ms</div><div class="font-telemetry-data text-telemetry-data text-on-surface">CLUSTER QPS: 48,290/s</div><div class="font-telemetry-data text-telemetry-data text-on-surface">HIT RATIO: 89.4% [NOMINAL]</div></div><div class="flex flex-col gap-space-xs"><span class="font-label-code text-label-code uppercase text-primary font-bold">Cluster Protocol</span><div class="font-telemetry-data text-telemetry-data text-on-surface">MESH: E-US-CENTRAL1-ALPHA</div><div class="font-telemetry-data text-telemetry-data text-on-surface">VECTOR SHARDS: 1,024 ACTIVE</div><div class="font-telemetry-data text-telemetry-data text-on-surface">TLS 1.3 // POST-QUANTUM AES</div></div><div class="flex flex-col gap-space-xs"><span class="font-label-code text-label-code uppercase text-primary font-bold">Dossier &amp; Compliance</span><div class="font-body-sm text-body-sm text-on-surface-variant">SOC-2 Type II Certified | HIPAA Dedicated Enclave | PII Redaction Engine Operational. Ausdata Labs Engineering Division.</div></div></div><div class="flex flex-col sm:flex-row items-center justify-between gap-space-sm pt-space-md border-t border-outline-variant"><span class="font-label-code text-label-code text-on-surface-variant uppercase">© 2025 Ausdata / CacheMind Core Systems. All rights reserved.</span><div class="flex items-center gap-space-md"><span class="font-label-code text-label-code text-primary font-bold">NODE STATUS: 32/32 SYNCED</span><span class="font-label-code text-label-code text-on-surface-variant">REF: 0x9FA23C4B</span></div></div></div></footer></body></html>

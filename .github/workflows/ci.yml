@@ -2,20 +2,54 @@ name: CacheMind CI & Test Suite
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
+      - 'feat/**'
+      - 'feat/*'
   pull_request:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
 
 jobs:
-  test:
-    name: Run Unit & Integration Tests
+  backend:
+    name: Backend CI (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version:
+          - "3.11"
+          - "3.12"
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: cachemind
+          POSTGRES_PASSWORD: cachemind
+          POSTGRES_DB: cachemind_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U cachemind -d cachemind_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     steps:
-      - name: Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
@@ -24,22 +58,74 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
-      - name: Install Dependencies
+      - name: Install package (editable mode + dev dependencies)
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
-          pip install pytest pytest-asyncio httpx pydantic fastapi uvicorn prometheus-client pyyaml
+          pip install -e ".[dev]"
 
-      - name: Execute Full Pytest Suite
+      - name: Verify application import and config
         env:
-          PYTHONPATH: .
-          DEV_API_KEY: cm_live_dev_master_key_1234567890
+          ENVIRONMENT: test
+          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          REDIS_URL: redis://localhost:6379/0
         run: |
-          python -m pytest -v
+          python -c "from backend.app.main import app; print('CacheMind FastAPI Application Import OK')"
 
-      - name: Run Live Verification Smoke Test
+      - name: Run unit test suite
         env:
-          PYTHONPATH: .
-          DEV_API_KEY: cm_live_dev_master_key_1234567890
+          ENVIRONMENT: test
+          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          REDIS_URL: redis://localhost:6379/0
         run: |
-          python scripts/verify_live.py
+          python -m pytest backend/tests/unit -v --tb=short
+
+      - name: Run integration test suite
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          python -m pytest backend/tests/integration -v --tb=short
+
+      - name: Validate database schema migrations (PostgreSQL + pgvector)
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: postgresql+asyncpg://cachemind:cachemind@localhost:5432/cachemind_test
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          alembic -c alembic.ini upgrade head
+          python scripts/verify_migrations.py
+
+  docker-build:
+    name: Docker Container Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build CacheMind production Docker image
+        run: |
+          docker build -t cachemind:latest .
+
+  frontend:
+    name: Dashboard Frontend Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard-app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: dashboard-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js Dashboard
+        run: npm run build

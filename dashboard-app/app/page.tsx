@@ -1,211 +1,176 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import StatCard from "@/components/StatCard";
-import LatencySavingsChart from "@/components/LatencySavingsChart";
-import CacheRatioChart from "@/components/CacheRatioChart";
-import { api } from "@/lib/api";
-import { DashboardSummary } from "@/lib/types";
-import {
-  Activity,
-  Zap,
-  Coins,
-  ShieldCheck,
-  RefreshCw,
-  Cpu,
-  Layers,
-  Database,
-  SlidersHorizontal,
-  ChevronRight,
-} from "lucide-react";
+import React from "react";
+import LandingNavbar from "@/components/landing/LandingNavbar";
+import HeroConstellation from "@/components/three/HeroConstellation";
+import VectorClusterVisualizer from "@/components/three/VectorClusterVisualizer";
+import LiveBenchmark from "@/components/landing/LiveBenchmark";
+import ArchitectureFlow from "@/components/landing/ArchitectureFlow";
+import CodeShowcase from "@/components/landing/CodeShowcase";
+import RoiCalculator from "@/components/landing/RoiCalculator";
+import { ArrowDown, Sparkles, Zap, ShieldCheck, Shield } from "lucide-react";
 
-export default function DashboardOverviewPage() {
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const fetchSummary = async () => {
-    try {
-      const data = await api.getDashboardSummary("tenant_default");
-      setSummary(data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchSummary();
-    const interval = setInterval(fetchSummary, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const totalRequests = summary?.total_requests || 0;
-  const exactHits = summary?.exact_hits || 0;
-  const semanticHits = summary?.semantic_hits || 0;
-  const misses = summary?.cache_misses || 0;
-  const hitRatio = summary ? (summary.cache_hit_ratio * 100).toFixed(1) : "0.0";
-  const tokensSaved = summary?.tokens_saved?.toLocaleString() || "0";
-  const costSaved = summary ? `$${summary.cost_saved_usd.toFixed(2)}` : "$0.00";
-  const avgCachedLatency = summary?.cached_average_latency_ms || 1.2;
-  const avgUncachedLatency = summary?.uncached_average_latency_ms || 480.0;
-
+export default function LandingPage() {
   return (
-    <div className="space-y-6">
-      {/* HUD Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-carbon-750/80">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-laser-emerald font-semibold">
-              SYS.ZONE // 01
-            </span>
-            <span className="text-slate-400 font-mono text-[10px]">
-              :: [OBSERVABILITY & CONTROL HUD]
-            </span>
+    <main className="min-h-screen bg-[#07090e] text-slate-200 overflow-x-hidden selection:bg-indigo-500/30 selection:text-indigo-100">
+      {/* ===== NAVBAR ===== */}
+      <LandingNavbar />
+
+      {/* ===== HERO ===== */}
+      <section id="hero" className="relative h-[92vh] flex items-center justify-center overflow-hidden">
+        <HeroConstellation />
+        <div className="absolute inset-0 z-10 bg-gradient-to-b from-[#07090e]/60 via-transparent to-[#07090e] pointer-events-none" />
+
+        <div className="relative z-20 text-center px-6 max-w-5xl mx-auto">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-900/60 border border-slate-700/60 text-xs font-mono text-slate-300 mb-6 shadow-inner shadow-indigo-950/20">
+            <Zap className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            <span>ENTERPRISE SEMANTIC CACHE GATEWAY v1.4</span>
           </div>
-          <h2 className="text-xl md:text-2xl font-mono font-bold text-white tracking-tight mt-1">
-            GATEWAY TELEMETRY & CACHE OVERVIEW
-          </h2>
-          <p className="text-xs font-mono text-slate-400 mt-0.5">
-            Sub-millisecond exact SHA-256 caching and FastEmbed semantic vector deduplication metrics.
+
+          <h1 className="font-display font-extrabold text-6xl sm:text-7xl lg:text-9xl tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-slate-50 via-indigo-100 to-slate-500 leading-[0.85] mb-6 drop-shadow-2xl">
+            SUB-MILLISECOND<br />
+            <span className="italic font-light">SEMANTIC</span> CACHING
+          </h1>
+
+          <p className="text-sm sm:text-base font-mono text-slate-400 leading-relaxed max-w-2xl mx-auto mb-10 tracking-tight">
+            CacheMind intercepts repeat, rephrased, and paraphrased LLM queries at the gateway using deterministic SHA-256 exact caching and 384D FastEmbed BGE-Small semantic vector search — before they reach expensive upstream compute.
+          </p>
+
+          <div className="flex flex-wrap justify-center gap-3 mb-8">
+            <a href="#interactive-demo" className="btn-primary text-xs font-mono flex items-center gap-2 shadow-xl shadow-indigo-900/40">
+              <Sparkles className="w-4 h-4" />
+              EXPLORE LIVE BENCHMARK
+            </a>
+            <a href="#pricing" className="text-xs font-mono px-6 py-3 bg-slate-900/60 border border-slate-700 text-slate-300 hover:border-indigo-500/60 hover:text-indigo-300 transition-all shadow-inner shadow-indigo-950/10">
+              VIEW PRICING
+            </a>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-6 md:gap-12 text-xs font-mono text-slate-500">
+            <div className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-400" /> <span>88% COMPUTE REDUCTION</span></div>
+            <div className="flex items-center gap-2"><Zap className="w-4 h-4 text-cyan-400" /> <span>&lt; 1.5ms P99 LATENCY</span></div>
+            <div className="flex items-center gap-2"><Shield className="w-4 h-4 text-indigo-400" /> <span>100% DETERMINISTIC</span></div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== BENCHMARKS ===== */}
+      <section id="benchmarks" className="py-24 px-4 lg:px-8 max-w-7xl mx-auto">
+        <LiveBenchmark />
+      </section>
+
+      {/* ===== ARCHITECTURE ===== */}
+      <section id="architecture" className="py-24 px-4 lg:px-8 max-w-7xl mx-auto">
+        <ArchitectureFlow />
+      </section>
+
+      {/* ===== INTERACTIVE DEMO / 3D VECTOR SPACE ===== */}
+      <section id="interactive-demo" className="py-24 px-4 lg:px-8 max-w-7xl mx-auto">
+        <div className="text-center mb-12">
+          <span className="label-caps text-indigo-400 mb-2 block">VECTOR SPACE VISUALIZER</span>
+          <h2 className="font-display font-bold text-4xl sm:text-5xl text-slate-100 tracking-tight mb-3">Interactive Semantic Clustering</h2>
+          <p className="text-xs font-mono text-slate-400 max-w-xl mx-auto leading-relaxed">
+            Explore how CacheMind maps queries into a 384-dimensional space using FastEmbed BGE-Small ONNX embeddings and compares cosine similarity to determine cache hits.
           </p>
         </div>
 
-        <button
-          onClick={fetchSummary}
-          className="flex items-center gap-2 px-3 py-1.5 bg-carbon-900 hover:bg-carbon-800 border border-carbon-750 hover:border-carbon-600 text-xs font-mono text-slate-200 rounded-sm transition-colors shadow-sm self-start md:self-auto"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 text-laser-emerald ${loading ? "animate-spin" : ""}`} />
-          <span>POLL METRICS</span>
-        </button>
-      </div>
+        <VectorClusterVisualizer />
+      </section>
 
-      {/* Top Telemetry KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Inference Requests"
-          value={totalRequests.toLocaleString()}
-          subtitle="Processed via Gateway"
-          icon={Zap}
-          trend="+14.2% RATE"
-          trendPositive={true}
-          accent="emerald"
-          code="REQ.IN"
-        />
-        <StatCard
-          title="Cache Efficiency"
-          value={`${hitRatio}%`}
-          subtitle={`${exactHits} exact + ${semanticHits} semantic`}
-          icon={Activity}
-          trend="+5.8% DELTA"
-          trendPositive={true}
-          accent="cyan"
-          code="HIT.RATIO"
-        />
-        <StatCard
-          title="Tokens Avoided"
-          value={tokensSaved}
-          subtitle="Direct API bypass"
-          icon={Coins}
-          trend="+22.4% VOL"
-          trendPositive={true}
-          accent="amber"
-          code="TOK.SAVED"
-        />
-        <StatCard
-          title="Cost Avoided (USD)"
-          value={costSaved}
-          subtitle="Estimated upstream billing delta"
-          icon={Database}
-          trend="+18.9% SAVED"
-          trendPositive={true}
-          accent="emerald"
-          code="USD.SAVED"
-        />
-      </div>
-
-      {/* Primary Analytics Visualizers */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2">
-          <LatencySavingsChart
-            cachedMs={avgCachedLatency}
-            uncachedMs={avgUncachedLatency}
-          />
+      {/* ===== CODE SHOWCASE ===== */}
+      <section id="code-showcase" className="py-24 px-4 lg:px-8 max-w-5xl mx-auto">
+        <div className="text-center mb-12">
+          <span className="label-caps text-cyan-400 mb-2 block">SDK INTEGRATIONS</span>
+          <h2 className="font-display font-bold text-4xl text-slate-100 tracking-tight">One Line. Zero Changes.</h2>
         </div>
-        <div className="lg:col-span-1">
-          <CacheRatioChart
-            exactHits={exactHits}
-            semanticHits={semanticHits}
-            misses={misses}
-          />
-        </div>
-      </div>
+        <CodeShowcase />
+      </section>
 
-      {/* Industrial Subsystem Status Matrix */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="industrial-panel bg-carbon-900 border border-carbon-750/90 rounded-sm p-5 space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-carbon-750/70">
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-laser-emerald" />
-              <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
-                L1 EXACT CACHE
-              </span>
+      {/* ===== ROI CALCULATOR ===== */}
+      <section id="roi-calculator" className="py-24 px-4 lg:px-8 max-w-7xl mx-auto">
+        <RoiCalculator />
+      </section>
+
+      {/* ===== PRICING ===== */}
+      <section id="pricing" className="py-24 px-4 lg:px-8 max-w-7xl mx-auto">
+        <div className="text-center mb-16">
+          <span className="label-caps text-emerald-400 mb-2 block">TRANSPARENT PRICING</span>
+          <h2 className="font-display font-bold text-4xl sm:text-5xl text-slate-100 tracking-tight mb-4">Scale As You Grow</h2>
+          <p className="text-xs font-mono text-slate-400 max-w-lg mx-auto">Developer tier starts at $0 with full semantic caching capabilities. No hidden overage fees.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            { title: "Developer", price: "$0", period: "forever free", features: ["500K requests / month", "L1 Exact Cache", "L2 Semantic Search", "3 API Keys", "Community Support"], highlight: false },
+            { title: "Growth", price: "$149", period: "/ month", features: ["5M requests / month", "L1 + L2 Full Access", "Custom Volatility Policies", "Real-Time Telemetry", "Priority Email Support", "Stripe Portal"], highlight: true },
+            { title: "Enterprise", price: "$899", period: "/ month", features: ["Unlimited Requests", "Dedicated Cluster", "On-Prem / Private Cloud", "SSO / SAML", "Dedicated Engineer", "Custom Guardrails"], highlight: false },
+          ].map((tier) => (
+            <div key={tier.title} className={`relative p-8 border shadow-2xl backdrop-blur-xl ${tier.highlight ? "bg-slate-900/90 border-indigo-500/40 shadow-indigo-500/10 scale-[1.02]" : "bg-slate-950/60 border-slate-800/60"}`}>
+              {tier.highlight && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] font-mono px-3 py-0.5 font-bold tracking-widest uppercase">Most Popular</div>
+              )}
+              <h3 className="font-display font-bold text-xl text-slate-100 mb-2">{tier.title}</h3>
+              <div className="flex items-baseline gap-1 mb-6">
+                <span className="font-display font-bold text-4xl text-emerald-400">{tier.price}</span>
+                <span className="text-xs font-mono text-slate-500">{tier.period}</span>
+              </div>
+              <ul className="space-y-3 mb-8">
+                {tier.features.map((f) => (
+                  <li key={f} className="text-xs font-mono text-slate-300 flex items-center gap-2">
+                    <span className="w-1 h-1 bg-indigo-400 rounded-full shrink-0" /> {f}
+                  </li>
+                ))}
+              </ul>
+              <a href="#" className={`block text-center text-xs font-mono py-3 border transition-colors ${tier.highlight ? "bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500" : "bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-600"}`}>
+                {tier.price === "$0" ? "GET API KEY" : "SELECT PLAN"}
+              </a>
             </div>
-            <span className="text-[9px] font-mono text-laser-emerald bg-laser-emerald/10 border border-laser-emerald/30 px-1.5 py-0.5 rounded-sm font-semibold">
-              &lt; 1.0ms
-            </span>
-          </div>
-          <p className="text-xs font-mono text-slate-400 leading-relaxed">
-            Deterministic JSON normalization with SHA-256 exact payload hashing. Sub-millisecond RAM & Redis backing.
-          </p>
-          <div className="pt-2 border-t border-carbon-750/50 flex justify-between items-center text-[10px] font-mono">
-            <span className="text-slate-400">HASHING ALGO:</span>
-            <span className="text-slate-200">SHA256 // DETERMINISTIC</span>
-          </div>
+          ))}
         </div>
+      </section>
 
-        <div className="industrial-panel bg-carbon-900 border border-carbon-750/90 rounded-sm p-5 space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-carbon-750/70">
-            <div className="flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-laser-cyan" />
-              <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
-                L2 SEMANTIC CACHE
-              </span>
-            </div>
-            <span className="text-[9px] font-mono text-laser-cyan bg-laser-cyan/10 border border-laser-cyan/30 px-1.5 py-0.5 rounded-sm font-semibold">
-              &gt; 0.92 SIM
-            </span>
+      {/* ===== FOOTER ===== */}
+      <footer className="border-t border-slate-800 bg-[#07090e] py-12 px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-10">
+          <div>
+            <div className="font-display font-bold text-xl text-slate-100 mb-3 tracking-tight">CacheMind</div>
+            <p className="text-xs font-mono text-slate-500 leading-relaxed">Precision semantic caching gateway for AI applications. Sub-millisecond L1 exact and L2 semantic hit detection.</p>
           </div>
-          <p className="text-xs font-mono text-slate-400 leading-relaxed">
-            FastEmbed ONNX embeddings (384-dim) with entity extraction & negation guardrails for zero hallucination caching.
-          </p>
-          <div className="pt-2 border-t border-carbon-750/50 flex justify-between items-center text-[10px] font-mono">
-            <span className="text-slate-400">VECTOR BACKEND:</span>
-            <span className="text-slate-200">FASTEMBED + NUMPY / PGVECTOR</span>
+          <div>
+            <h4 className="text-xs font-mono font-bold text-indigo-400 mb-3 uppercase tracking-widest">Product</h4>
+            <ul className="space-y-2 text-xs font-mono text-slate-400">
+              <li><a href="#benchmarks" className="hover:text-slate-200">Benchmarks</a></li>
+              <li><a href="#architecture" className="hover:text-slate-200">Architecture</a></li>
+              <li><a href="#" className="hover:text-slate-200">Documentation</a></li>
+              <li><a href="#" className="hover:text-slate-200">Changelog</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="text-xs font-mono font-bold text-cyan-400 mb-3 uppercase tracking-widest">Console</h4>
+            <ul className="space-y-2 text-xs font-mono text-slate-400">
+              <li><a href="/dashboard" className="hover:text-slate-200">Dashboard</a></li>
+              <li><a href="/cache" className="hover:text-slate-200">Cache Explorer</a></li>
+              <li><a href="/playground" className="hover:text-slate-200">Inference Arena</a></li>
+              <li><a href="/analytics" className="hover:text-slate-200">Analytics</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="text-xs font-mono font-bold text-emerald-400 mb-3 uppercase tracking-widest">Status</h4>
+            <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 mb-1">
+              <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" /> All Systems Operational
+            </div>
+            <div className="text-xs font-mono text-slate-500">Uptime: 99.99%</div>
           </div>
         </div>
-
-        <div className="industrial-panel bg-carbon-900 border border-carbon-750/90 rounded-sm p-5 space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-carbon-750/70">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-laser-amber" />
-              <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
-                PII GATEWAY MASKER
-              </span>
-            </div>
-            <span className="text-[9px] font-mono text-laser-amber bg-laser-amber/10 border border-laser-amber/30 px-1.5 py-0.5 rounded-sm font-semibold">
-              MASK MODE
-            </span>
-          </div>
-          <p className="text-xs font-mono text-slate-400 leading-relaxed">
-            Automatic redaction of Luhn-verified credit cards, SSNs, phone numbers, secret API keys, and IPs before caching.
-          </p>
-          <div className="pt-2 border-t border-carbon-750/50 flex justify-between items-center text-[10px] font-mono">
-            <span className="text-slate-400">LUHN VALIDATION:</span>
-            <span className="text-laser-emerald font-semibold">ENFORCED</span>
+        <div className="max-w-7xl mx-auto mt-10 pt-6 border-t border-slate-900 flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] font-mono text-slate-600">
+          <span>CacheMind Inc. All rights reserved.</span>
+          <div className="flex gap-6">
+            <a href="#" className="hover:text-slate-400">Privacy</a>
+            <a href="#" className="hover:text-slate-400">Terms</a>
+            <a href="#" className="hover:text-slate-400">GitHub</a>
           </div>
         </div>
-      </div>
-    </div>
+      </footer>
+    </main>
   );
 }

@@ -15,8 +15,6 @@ class CachedResponse(BaseModel):
     id: Optional[str] = None
     content: Optional[str] = None
     created: Optional[int] = None
-    cached_at: Optional[float] = None
-    ttl: Optional[int] = None
     created_at: float = Field(default_factory=time.time)
     ttl_seconds: int = 86400
     hit_count: int = 0
@@ -25,6 +23,4 @@ class CachedResponse(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     def is_expired(self) -> bool:
-        created_time = self.cached_at if self.cached_at is not None else self.created_at
-        ttl_val = self.ttl if self.ttl is not None else self.ttl_seconds
-        return (time.time() - created_time) > ttl_val
+        return (time.time() - self.created_at) > self.ttl_seconds

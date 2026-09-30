@@ -85,3 +85,38 @@ async def test_exact_cache_hit_and_zero_upstream_calls(
 
     assert logs[2].cache_status == "EXACT_HIT"
     assert logs[2].upstream_called is False
+
+
+@pytest.mark.asyncio
+async def test_concurrent_request_coalescing_stampede_prevention(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    tenant_a_fixtures: dict,
+):
+    import asyncio
+    raw_key = tenant_a_fixtures["raw_key"]
+    headers = {"Authorization": f"Bearer {raw_key}"}
+    provider = get_provider()
+
+    initial_provider_calls = provider.call_count
+
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "user", "content": "What is quantum entanglement in one sentence?"}],
+        "temperature": 0.0,
+    }
+
+    # Fire 5 concurrent requests with identical payload simultaneously
+    tasks = [
+        async_client.post("/v1/chat/completions", headers=headers, json=payload)
+        for _ in range(5)
+    ]
+    responses = await asyncio.gather(*tasks)
+
+    for resp in responses:
+        assert resp.status_code == 200
+        assert resp.headers["X-CacheMind-Status"] in ("MISS", "EXACT_HIT")
+
+    # Single-flight coalescing ensures upstream provider was called only once despite 5 concurrent requests!
+    assert provider.call_count == initial_provider_calls + 1
+

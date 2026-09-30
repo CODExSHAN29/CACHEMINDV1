@@ -19,8 +19,8 @@ async def test_cache_delete_exact_key():
         model="gpt-4o",
         created=1700000000,
         content="Cached response text",
-        cached_at=1700000000.0,
-        ttl=3600,
+        created_at=1700000000.0,
+        ttl_seconds=3600,
         exact_request_hash=key_hash,
     )
     await backend.set(project_id, key_hash, cached)
@@ -51,8 +51,8 @@ async def test_cache_list_keys():
             model="gpt-4o",
             created=1700000000,
             content=f"Response {i}",
-            cached_at=1700000000.0,
-            ttl=3600,
+            created_at=1700000000.0,
+            ttl_seconds=3600,
             exact_request_hash=key,
         )
         await backend.set(project_id, key, cached)
@@ -73,8 +73,8 @@ async def test_cache_purge():
             model="gpt-4o" if i < 2 else "claude-3-5-sonnet",
             created=1700000000,
             content=f"Purge Response {i}",
-            cached_at=1700000000.0,
-            ttl=3600,
+            created_at=1700000000.0,
+            ttl_seconds=3600,
             exact_request_hash=f"purge_hash_{i}",
             tags=["finance"] if i == 0 else ["general"],
             namespace="v1" if i == 0 else "v2",

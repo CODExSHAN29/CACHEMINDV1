@@ -27,90 +27,65 @@ except Exception:
 class SemanticCacheFactory:
     """
     Factory for creating and managing semantic cache service components.
-
-    Provides singleton instances with optional override capabilities for testing.
+    Delegates directly to module-level singleton providers.
     """
 
-    _embedding_engine: Optional[EmbeddingEngine] = None
-    _vector_index: Optional[VectorIndex] = None
-    _arbiter: Optional["GuardrailArbiter"] = None
-    _volatility_engine: Optional["VolatilityEngine"] = None
+    @staticmethod
+    def get_embedding_engine() -> EmbeddingEngine:
+        return get_embedding_engine()
 
-    @classmethod
-    def get_embedding_engine(cls) -> EmbeddingEngine:
-        """Get or create the singleton EmbeddingEngine."""
-        if cls._embedding_engine is None:
-            cls._embedding_engine = EmbeddingEngine()
-        return cls._embedding_engine
+    @staticmethod
+    def set_embedding_engine(engine: Optional[EmbeddingEngine]) -> None:
+        set_embedding_engine(engine)
 
-    @classmethod
-    def set_embedding_engine(cls, engine: EmbeddingEngine) -> None:
-        """Override the singleton EmbeddingEngine (for testing)."""
-        cls._embedding_engine = engine
+    @staticmethod
+    def get_vector_index() -> VectorIndex:
+        return get_vector_index()
 
-    @classmethod
-    def get_vector_index(cls) -> VectorIndex:
-        """Get or create the singleton VectorIndex."""
-        if cls._vector_index is None:
-            cls._vector_index = VectorIndex()
-        return cls._vector_index
+    @staticmethod
+    def set_vector_index(index: Optional[VectorIndex]) -> None:
+        set_vector_index(index)
 
-    @classmethod
-    def set_vector_index(cls, index: VectorIndex) -> None:
-        """Override the singleton VectorIndex (for testing)."""
-        cls._vector_index = index
-
-    @classmethod
-    def get_arbiter(cls):
-        """Get or create the singleton GuardrailArbiter."""
-        # Import here to avoid circular dependencies
+    @staticmethod
+    def get_arbiter():
         from backend.guardrails.factory import get_guardrail_arbiter
-        if cls._arbiter is None:
-            cls._arbiter = get_guardrail_arbiter()
-        return cls._arbiter
+        return get_guardrail_arbiter()
 
-    @classmethod
-    def set_arbiter(cls, arbiter) -> None:
-        """Override the singleton GuardrailArbiter (for testing)."""
-        cls._arbiter = arbiter
+    @staticmethod
+    def set_arbiter(arbiter) -> None:
+        from backend.guardrails.factory import set_guardrail_arbiter
+        set_guardrail_arbiter(arbiter)
 
-    @classmethod
-    def get_volatility_engine(cls):
-        """Get or create the singleton VolatilityEngine."""
+    @staticmethod
+    def get_volatility_engine():
         from backend.guardrails.factory import get_volatility_engine
-        if cls._volatility_engine is None:
-            cls._volatility_engine = get_volatility_engine()
-        return cls._volatility_engine
+        return get_volatility_engine()
 
-    @classmethod
-    def set_volatility_engine(cls, engine) -> None:
-        """Override the singleton VolatilityEngine (for testing)."""
-        cls._volatility_engine = engine
+    @staticmethod
+    def set_volatility_engine(engine) -> None:
+        from backend.guardrails.factory import set_volatility_engine
+        set_volatility_engine(engine)
 
-    @classmethod
-    def get_vector_backend(cls) -> SemanticCacheBackend:
-        """Dynamic backend selection: memory / pgvector / qdrant."""
+    @staticmethod
+    def get_vector_backend() -> SemanticCacheBackend:
         backend = settings.VECTOR_BACKEND
         if backend == "pgvector" and PgVectorSemanticBackend is not None:
             return PgVectorSemanticBackend()
         elif backend == "qdrant" and QdrantSemanticBackend is not None:
             return QdrantSemanticBackend()
-        else:
-            # Default in-memory vector index wrapper
-            return get_semantic_cache_service()
-
-    @classmethod
-    def get_semantic_cache_service(cls) -> "SemanticCacheService":
-        """Get or create the SemanticCacheService instance."""
         return get_semantic_cache_service()
 
-    @classmethod
-    def reset_singletons(cls) -> None:
-        """Reset all singleton instances (primarily for testing)."""
-        cls._embedding_engine = None
-        cls._vector_index = None
-        cls._arbiter = None
-        cls._volatility_engine = None
+    @staticmethod
+    def get_semantic_cache_service() -> "SemanticCacheService":
+        return get_semantic_cache_service()
+
+    @staticmethod
+    def reset_singletons() -> None:
+        set_embedding_engine(None)
+        set_vector_index(None)
+        from backend.guardrails.factory import set_guardrail_arbiter, set_volatility_engine
+        set_guardrail_arbiter(None)
+        set_volatility_engine(None)
 
 
 class SemanticCacheService(SemanticCacheBackend):

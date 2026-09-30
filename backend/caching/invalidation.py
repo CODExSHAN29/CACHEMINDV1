@@ -170,14 +170,14 @@ class CacheManagementService:
             exists=True,
             provider=cached.provider,
             model=cached.model,
-            ttl_seconds=cached.ttl if cached.ttl is not None else cached.ttl_seconds,
+            ttl_seconds=cached.ttl_seconds,
             hit_count=cached.hit_count,
             namespace=cached.namespace,
             tags=cached.tags or [],
             response_preview=preview,
             content_preview=preview,
             usage=(cached.response_payload or {}).get("usage"),
-            created_at=cached.cached_at if cached.cached_at is not None else cached.created_at,
+            created_at=cached.created_at,
         )
 
     @classmethod

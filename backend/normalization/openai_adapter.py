@@ -76,13 +76,15 @@ class OpenAIAdapter:
             "model", "messages", "tools", "tool_choice", "temperature", "top_p",
             "n", "stream", "stop", "max_tokens", "max_completion_tokens",
             "presence_penalty", "frequency_penalty", "logit_bias", "user",
-            "response_format", "seed", "namespace", "tags", "cachemind_namespace", "cachemind_tags"
+            "response_format", "seed", "namespace", "tags", "cachemind_namespace", "cachemind_tags",
+            "allow_provider_fallback", "cachemind_allow_fallback"
         }
         provider_options = {k: v for k, v in payload.items() if k not in known_keys}
 
         namespace = payload.get("namespace") or payload.get("cachemind_namespace")
         raw_tags = payload.get("tags") or payload.get("cachemind_tags") or []
         tags = [str(t).strip() for t in raw_tags if str(t).strip()] if isinstance(raw_tags, list) else []
+        allow_fallback = bool(payload.get("allow_provider_fallback", payload.get("cachemind_allow_fallback", False)))
 
         return NormalizedInferenceRequest(
             provider="openai",
@@ -106,6 +108,7 @@ class OpenAIAdapter:
             tags=tags,
             stream=bool(req.stream),
             user=req.user,
+            allow_provider_fallback=allow_fallback,
         )
 
     @staticmethod

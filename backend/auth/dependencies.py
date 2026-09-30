@@ -2,6 +2,7 @@ from fastapi import Depends, Header, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.config import settings
 from backend.auth.identity import AuthenticatedIdentity
 from backend.auth.keys import hash_api_key
 from backend.db.repositories import APIKeyRepository
@@ -18,6 +19,7 @@ async def get_authenticated_identity(
     """
     Authenticates caller via Bearer token or api-key header.
     Resolves API Key -> Project -> Tenant.
+    Supports Master Admin Key for cluster management.
     Enforces active checks on API key, Project, and Tenant.
     Fails closed (HTTP 401) on any authentication or hierarchy failure.
     """
@@ -32,6 +34,18 @@ async def get_authenticated_identity(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing authentication credentials. Provide a valid Bearer token.",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Master Admin Key Bypass for administrative access
+    if settings.ADMIN_MASTER_KEY and raw_key == settings.ADMIN_MASTER_KEY:
+        return AuthenticatedIdentity(
+            tenant_id="admin_tenant",
+            project_id="admin_project",
+            api_key_id="admin_master_key",
+            tenant_name="CacheMind System Admin",
+            project_name="Admin Control Plane",
+            key_prefix="cm_admin",
+            role="admin",
         )
 
     key_hash = hash_api_key(raw_key)

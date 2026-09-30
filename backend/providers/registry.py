@@ -11,6 +11,16 @@ from backend.providers.openai_provider import OpenAIProvider
 logger = logging.getLogger(__name__)
 
 
+class ProviderConfigurationError(Exception):
+    """Raised when a provider is configured for use but required credentials are missing."""
+    pass
+
+
+def _mocks_allowed() -> bool:
+    """Mocks are only allowed when ENVIRONMENT is test, or explicitly via ALLOW_MOCK_PROVIDERS."""
+    return settings.ENVIRONMENT == "test" or settings.ALLOW_MOCK_PROVIDERS
+
+
 class ProviderRegistry:
     """
     Registry for managing and dynamically resolving upstream LLM providers.
@@ -39,17 +49,28 @@ class ProviderRegistry:
         if name_lower == "openai":
             if settings.OPENAI_API_KEY:
                 provider = OpenAIProvider()
-            else:
+            elif _mocks_allowed():
                 provider = MockProvider(provider_name="openai")
+            else:
+                raise ProviderConfigurationError(
+                    "OPENAI_API_KEY is missing and mock providers are not allowed in production"
+                )
         elif name_lower == "anthropic":
             if settings.ANTHROPIC_API_KEY:
                 provider = AnthropicProvider()
-            else:
+            elif _mocks_allowed():
                 provider = MockProvider(provider_name="anthropic")
+            else:
+                raise ProviderConfigurationError(
+                    "ANTHROPIC_API_KEY is missing and mock providers are not allowed in production"
+                )
         elif name_lower == "ollama":
             provider = OllamaProvider()
         elif name_lower == "mock":
-            provider = MockProvider(provider_name="mock")
+            if _mocks_allowed():
+                provider = MockProvider(provider_name="mock")
+            else:
+                raise ProviderConfigurationError("Mock provider is not allowed in production")
 
         if provider is not None:
             self._providers[name_lower] = provider
@@ -70,12 +91,17 @@ class ProviderRegistry:
         elif m.startswith("mock"):
             return "mock"
 
-        # Default fallback
+        # Default fallback — never silently default to mock in production
         if settings.OPENAI_API_KEY:
             return "openai"
         elif settings.ANTHROPIC_API_KEY:
             return "anthropic"
-        return "mock"
+        elif _mocks_allowed():
+            return "mock"
+        else:
+            raise ProviderConfigurationError(
+                "Cannot resolve provider for model '%s': no provider credentials configured and mocks disabled" % model
+            )
 
     async def close_all(self) -> None:
         """Closes all active provider HTTP clients."""

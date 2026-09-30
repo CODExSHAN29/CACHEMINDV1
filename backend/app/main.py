@@ -83,6 +83,8 @@ async def seed_development_fixtures() -> None:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manages application startup and graceful shutdown."""
     logger.info("Starting CacheMind Gateway (Environment: %s)...", settings.ENVIRONMENT)
+    # Fail-closed production configuration validation
+    settings.validate_production_configuration()
     await init_db()
     if settings.ENVIRONMENT == "development":
         await seed_development_fixtures()
@@ -119,3 +121,16 @@ app.include_router(billing_router)
 app.include_router(health_router)
 app.include_router(metrics_router)
 app.include_router(dashboard_router)
+
+
+@app.get("/", tags=["Gateway Info"])
+async def root():
+    return {
+        "service": "CacheMind Gateway",
+        "status": "online",
+        "docs_url": "/docs",
+        "health_url": "/health",
+        "frontend_dashboard_url": "http://localhost:3000",
+        "version": "0.1.0",
+        "description": "Safe, Sub-Millisecond Semantic & Exact Caching Gateway for LLM APIs",
+    }

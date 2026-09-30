@@ -2,7 +2,7 @@
 Pydantic models for CacheMind Billing & Metering (Pillar 4).
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, Optional
 
@@ -130,8 +130,8 @@ class BillingPlan(BaseModel):
     trial_ends_at: Optional[datetime] = None
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class UsageSummary(BaseModel):
@@ -163,7 +163,7 @@ class MeteredUsageEvent(BaseModel):
     subscription_item_id: Optional[str] = None
     quantity: int
     metric: str  # requests | tokens_saved | cost_saved_usd
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     stripe_event_id: Optional[str] = None
     processed: bool = False
 

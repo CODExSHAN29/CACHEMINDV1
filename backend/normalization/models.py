@@ -57,6 +57,8 @@ class NormalizedInferenceRequest(BaseModel):
     user: Optional[str] = None
     timeout: Optional[float] = None
     client_request_id: Optional[str] = None
+    # Cache policy: allow_provider_fallback disables default provider fallback chain
+    allow_provider_fallback: bool = False
 
     def to_inference_identity_dict(self) -> Dict[str, Any]:
         """

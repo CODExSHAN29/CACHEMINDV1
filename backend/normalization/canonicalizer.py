@@ -5,30 +5,15 @@ from typing import Any
 from backend.normalization.models import NormalizedInferenceRequest
 
 
-def canonicalize_data(val: Any) -> Any:
-    """
-    Recursively canonicalizes data structures:
-    - Dicts: Keys are sorted lexicographically, values canonicalized recursively.
-    - Lists/Tuples: Sequence order is STRICTLY preserved, items canonicalized recursively.
-    - Primitives: Returned directly.
-    """
-    if isinstance(val, dict):
-        return {k: canonicalize_data(v) for k, v in sorted(val.items(), key=lambda item: str(item[0]))}
-    elif isinstance(val, (list, tuple)):
-        return [canonicalize_data(item) for item in val]
-    return val
-
-
 def canonical_json(data: Any) -> str:
     """
     Serializes data to a deterministic, canonical JSON string:
-    - Recursively sorted keys
+    - Recursively sorted keys (via json.dumps sort_keys=True)
     - Compact separators (no trailing or leading whitespace around ':' and ',')
     - Explicit UTF-8 (ensure_ascii=False)
     """
-    canonical_obj = canonicalize_data(data)
     return json.dumps(
-        canonical_obj,
+        data,
         sort_keys=True,
         ensure_ascii=False,
         separators=(",", ":"),

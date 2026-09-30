@@ -6,6 +6,7 @@ import httpx
 
 from backend.normalization.models import NormalizedInferenceRequest
 from backend.providers.registry import ProviderRegistry, get_provider_registry
+from backend.providers.registry import ProviderConfigurationError
 from backend.resilience.circuit_breaker import (
     CircuitBreakerRegistry,
     get_circuit_breaker_registry,
@@ -44,21 +45,21 @@ class RoutingEngine:
 
         fallbacks: List[ProviderTarget] = []
 
-        # Construct intelligent cross-provider fallback matrix
+        # Construct cross-provider fallback matrix (NO mock targets in production)
         if primary_provider == "openai":
             fallbacks.append(ProviderTarget(provider="anthropic", model="claude-3-5-sonnet-20241022"))
             fallbacks.append(ProviderTarget(provider="ollama", model="llama3"))
-            fallbacks.append(ProviderTarget(provider="mock", model=request.model))
         elif primary_provider == "anthropic":
             fallbacks.append(ProviderTarget(provider="openai", model="gpt-4o"))
             fallbacks.append(ProviderTarget(provider="ollama", model="llama3"))
-            fallbacks.append(ProviderTarget(provider="mock", model=request.model))
         elif primary_provider == "ollama":
             fallbacks.append(ProviderTarget(provider="openai", model="gpt-4o-mini"))
-            fallbacks.append(ProviderTarget(provider="mock", model=request.model))
-        else:
-            # For mock or unspecified, provide safe mock fallback
-            fallbacks.append(ProviderTarget(provider="mock", model=request.model))
+            fallbacks.append(ProviderTarget(provider="anthropic", model="claude-3-5-sonnet-20241022"))
+        # No fallback targets added for mock/unknown primary providers
+
+        # Fallback is disabled by default; only enabled when explicitly allowed
+        if not getattr(request, "allow_provider_fallback", False):
+            fallbacks = []
 
         return RoutingPlan(primary=primary_target, fallbacks=fallbacks)
 
