@@ -21,9 +21,9 @@ const SNIPPETS: CodeSnippet[] = [
 
 # Initialize CacheMind high-performance client
 client = CacheMindClient(
-    api_key="cm_live_7a8b9c0d1e2f3a4b",
+    api_key="cm_live_your_project_key_here",
     similarity_threshold=0.92, # FastEmbed 384D BGE-Small Cosine
-    tenant_id="tenant_production_01"
+    tenant_id="your_workspace_id"
 )
 
 # Semantic-aware completion call (< 1.5ms on hit)
