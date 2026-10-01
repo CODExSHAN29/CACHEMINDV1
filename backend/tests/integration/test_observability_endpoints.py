@@ -39,3 +39,47 @@ async def test_dashboard_endpoint_rendering(async_client: AsyncClient):
     assert "timeseriesChart" in html_content
     assert "modelsChart" in html_content
     assert "logsTableBody" in html_content
+
+
+@pytest.mark.asyncio
+async def test_health_liveness_endpoint(async_client: AsyncClient):
+    # Test /health/live
+    res = await async_client.get("/health/live")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "healthy"
+    assert data["probe"] == "liveness"
+    assert "timestamp" in data
+
+    # Test /live alias
+    res_alias = await async_client.get("/live")
+    assert res_alias.status_code == 200
+    assert res_alias.json()["status"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_health_readiness_endpoint(async_client: AsyncClient):
+    # Test /health/ready
+    res = await async_client.get("/health/ready")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "ready"
+    assert "components" in data
+    assert data["components"]["database"]["status"] == "healthy"
+    assert data["components"]["cache_backend"]["status"] == "healthy"
+    assert data["components"]["embedding_engine"]["status"] == "healthy"
+
+    # Test /ready alias
+    res_alias = await async_client.get("/ready")
+    assert res_alias.status_code == 200
+    assert res_alias.json()["status"] == "ready"
+
+
+@pytest.mark.asyncio
+async def test_health_legacy_endpoint(async_client: AsyncClient):
+    res = await async_client.get("/health")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "healthy"
+    assert data["service"] == "cachemind-gateway"
+

@@ -115,7 +115,8 @@ def setup_test_singletons():
 @pytest_asyncio.fixture(scope="function")
 async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-        yield db_session
+        async with TestingAsyncSessionLocal() as session:
+            yield session
 
     app.dependency_overrides[get_db] = override_get_db
 
