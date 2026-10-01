@@ -1,15 +1,16 @@
 import time
 import pytest
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from backend.db.models import SemanticVectorEntry
-from backend.db.session import AsyncSessionLocal
 from backend.semantic.pgvector_backend import PgVectorSemanticBackend
 from backend.semantic.vector_index import SemanticCandidate
 
 
 @pytest.mark.asyncio
 async def test_pgvector_backend_insert_and_search(db_session):
-    backend = PgVectorSemanticBackend(session_factory=AsyncSessionLocal, default_threshold=0.85)
+    test_factory = async_sessionmaker(bind=db_session.bind, expire_on_commit=False)
+    backend = PgVectorSemanticBackend(session_factory=test_factory, default_threshold=0.85)
 
     # 1. Clear any prior test entries
     await backend.clear()
@@ -76,7 +77,8 @@ async def test_pgvector_backend_insert_and_search(db_session):
 
 @pytest.mark.asyncio
 async def test_pgvector_backend_ttl_expiry(db_session):
-    backend = PgVectorSemanticBackend(session_factory=AsyncSessionLocal, default_threshold=0.85)
+    test_factory = async_sessionmaker(bind=db_session.bind, expire_on_commit=False)
+    backend = PgVectorSemanticBackend(session_factory=test_factory, default_threshold=0.85)
     await backend.clear()
 
     scope = "scope_expired_test"
