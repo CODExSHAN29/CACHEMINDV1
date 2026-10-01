@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { CacheInspection } from "@/lib/types";
 import VectorClusterVisualizer from "@/components/three/VectorClusterVisualizer";
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 
 export default function CacheEnginePage() {
+  const { activeWorkspace, activeProject } = useAuth();
   const [purgeModel, setPurgeModel] = useState("");
   const [purgeTags, setPurgeTags] = useState("");
   const [purgeLoading, setPurgeLoading] = useState(false);
@@ -33,11 +35,16 @@ export default function CacheEnginePage() {
   const [warmLoading, setWarmLoading] = useState(false);
 
   const handlePurge = async () => {
+    if (!activeWorkspace?.id) {
+      toast.error("No active workspace selected.");
+      return;
+    }
     setPurgeLoading(true);
     try {
       const tags = purgeTags ? purgeTags.split(",").map((t) => t.trim()) : undefined;
       const res = await api.purgeCache({
-        tenant_id: "tenant_default",
+        tenant_id: activeWorkspace.id,
+        project_id: activeProject?.id || undefined,
         model: purgeModel || undefined,
         tags,
       });
@@ -77,15 +84,23 @@ export default function CacheEnginePage() {
       toast.error("Both Prompt and Completion payload required for vector seeding");
       return;
     }
+    if (!activeWorkspace?.id) {
+      toast.error("No active workspace selected.");
+      return;
+    }
     setWarmLoading(true);
     try {
-      const res = await api.warmCache([
-        {
-          prompt: warmPrompt.trim(),
-          completion: warmCompletion.trim(),
-          model: warmModel,
-        },
-      ]);
+      const res = await api.warmCache({
+        tenant_id: activeWorkspace.id,
+        project_id: activeProject?.id || undefined,
+        items: [
+          {
+            prompt: warmPrompt.trim(),
+            completion: warmCompletion.trim(),
+            model: warmModel,
+          },
+        ],
+      });
       toast.success(`Successfully seeded ${res.seeded} record(s) into L1 exact and L2 vector index.`);
       setWarmPrompt("");
       setWarmCompletion("");
@@ -115,6 +130,9 @@ export default function CacheEnginePage() {
           <p className="text-xs font-sans text-on-surface-variant mt-1 max-w-3xl">
             Granular L1 exact key invalidation, FastEmbed ONNX pre-warming, and SHA-256 cache inspector.
           </p>
+          <p className="text-[10px] font-mono text-slate-500 mt-2">
+            WORKSPACE: {activeWorkspace?.name || activeWorkspace?.id || "AUTHENTICATING..."} {activeProject?.name ? `| PROJECT: ${activeProject.name}` : ""}
+          </p>
         </div>
       </div>
 
@@ -138,7 +156,7 @@ export default function CacheEnginePage() {
             </span>
           </div>
           <p className="text-xs font-mono text-on-surface-variant">
-            Evict matching exact cache keys and FastEmbed semantic vectors partitioned by model, namespace, or metadata tags.
+            Evict matching exact cache keys and FastEmbed semantic vectors partitioned by workspace, project, model, or metadata tags.
           </p>
 
           <div className="space-y-3 font-mono text-xs">

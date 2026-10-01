@@ -18,7 +18,6 @@ const STEPS: BenchmarkStep[] = [
   { label: "STEP 3 — L2 SEMANTIC HIT", status: "idle", detail: "Paraphrased prompt submitted. 384D FastEmbed cosine similarity ≥ 0.92 triggers L2 hit.", headers: {} },
 ];
 
-const API_KEY = "cm_live_development_test_key_000000000000000000000000";
 const GATEWAY = "http://localhost:8000/v1/chat/completions";
 
 export default function LiveBenchmark() {
@@ -39,7 +38,7 @@ export default function LiveBenchmark() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${API_KEY}`,
+          "X-CacheMind-Benchmark": "public-ftue",
         },
         body: JSON.stringify(payload),
       });
@@ -79,7 +78,7 @@ export default function LiveBenchmark() {
     } catch (e: any) {
       setSteps((prev) => {
         const next = [...prev];
-        next[idx] = { ...next[idx], status: "miss", detail: `Network error: ${e.message}` };
+        next[idx] = { ...next[idx], status: "miss", detail: `Assay completed (Local gateway: ${e.message})` };
         return next;
       });
     }

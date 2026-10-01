@@ -11,9 +11,8 @@ import {
   CreditCard,
   Terminal,
   Cpu,
-  Sparkles,
-  Layers,
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 const navItems = [
   { name: "System Overview", href: "/dashboard", icon: LayoutDashboard, code: "01" },
@@ -26,6 +25,7 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { activeWorkspace } = useAuth();
 
   return (
     <aside className="w-64 bg-[#07090e]/95 border-r border-slate-800/80 flex flex-col justify-between h-screen sticky top-0 select-none backdrop-blur-xl z-20">
@@ -118,7 +118,9 @@ export default function Sidebar() {
             </div>
             <div className="flex justify-between">
               <span>TENANT SCOPE:</span>
-              <span className="text-slate-200 font-semibold">tenant_production_01</span>
+              <span className="text-slate-200 font-semibold truncate max-w-[120px]" title={activeWorkspace?.name || activeWorkspace?.id || "default"}>
+                {activeWorkspace?.name || activeWorkspace?.id || "N/A"}
+              </span>
             </div>
           </div>
         </div>

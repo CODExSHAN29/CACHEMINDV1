@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { Sparkles, ArrowRight, ShieldCheck, Terminal, Menu, X, Cpu } from "lucide-react";
+import { ArrowRight, Menu, X, Cpu } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 export default function LandingNavbar() {
-  const { user, loginDemo } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -79,21 +79,31 @@ export default function LandingNavbar() {
 
         {/* Action CTAs */}
         <div className="hidden sm:flex items-center gap-3">
-          <button
-            onClick={loginDemo}
-            className="text-xs font-mono px-3.5 py-2 text-indigo-300 bg-indigo-950/40 hover:bg-indigo-900/60 border border-indigo-800/80 hover:border-indigo-500 transition-all flex items-center gap-1.5 shadow-[0_0_15px_rgba(99,102,241,0.15)]"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            1-CLICK DEMO
-          </button>
-
-          <Link
-            href="/login"
-            className="btn-primary text-xs font-mono flex items-center gap-2"
-          >
-            ENTER CONSOLE
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              href="/dashboard"
+              className="btn-primary text-xs font-mono flex items-center gap-2"
+            >
+              OPEN CONSOLE
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="text-xs font-mono px-3.5 py-2 text-slate-300 hover:text-white bg-slate-900/60 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 transition-all flex items-center gap-1.5"
+              >
+                SIGN IN
+              </Link>
+              <Link
+                href="/signup"
+                className="btn-primary text-xs font-mono flex items-center gap-2"
+              >
+                GET STARTED
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile menu trigger */}
@@ -144,22 +154,32 @@ export default function LandingNavbar() {
             // Pricing
           </a>
           <div className="pt-4 border-t border-slate-800 flex flex-col gap-3">
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                loginDemo();
-              }}
-              className="w-full text-xs font-mono py-2.5 bg-indigo-950 text-indigo-300 border border-indigo-800 text-center"
-            >
-              1-CLICK DEVELOPER DEMO
-            </button>
-            <Link
-              href="/login"
-              onClick={() => setMobileMenuOpen(false)}
-              className="w-full btn-primary text-xs font-mono text-center justify-center py-2.5"
-            >
-              LAUNCH CONSOLE
-            </Link>
+            {isAuthenticated ? (
+              <Link
+                href="/dashboard"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full btn-primary text-xs font-mono text-center justify-center py-2.5"
+              >
+                OPEN CONSOLE
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full text-xs font-mono py-2.5 bg-slate-900 text-slate-200 border border-slate-800 text-center"
+                >
+                  SIGN IN
+                </Link>
+                <Link
+                  href="/signup"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full btn-primary text-xs font-mono text-center justify-center py-2.5"
+                >
+                  GET STARTED
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -1,19 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import toast, { Toaster } from "react-hot-toast";
-import { KeyRound, ShieldCheck, X, Check, Clock, Radio, Cpu } from "lucide-react";
+import { Toaster } from "react-hot-toast";
+import { Clock, Cpu, User, LogOut, ChevronDown } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Navbar() {
-  const [apiKey, setApiKey] = useState("");
-  const [adminKey, setAdminKey] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
+  const { user, activeWorkspace, workspaces, switchWorkspace, logout } = useAuth();
   const [time, setTime] = useState<string>("");
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   useEffect(() => {
-    setApiKey(localStorage.getItem("cachemind_api_key") || "cm_live_development_test_key_000000000000000000000000");
-    setAdminKey(localStorage.getItem("cachemind_admin_key") || "cm_admin_master_secret_key_9999999999999999");
-
     const updateClock = () => {
       const now = new Date();
       setTime(now.toISOString().replace("T", " ").substring(0, 19) + " UTC");
@@ -22,13 +19,6 @@ export default function Navbar() {
     const interval = setInterval(updateClock, 1000);
     return () => clearInterval(interval);
   }, []);
-
-  const handleSaveKeys = () => {
-    localStorage.setItem("cachemind_api_key", apiKey.trim());
-    localStorage.setItem("cachemind_admin_key", adminKey.trim());
-    toast.success("Gateway authentication credentials securely stored.");
-    setIsOpen(false);
-  };
 
   return (
     <>
@@ -52,7 +42,7 @@ export default function Navbar() {
             <span className="w-2 h-2 bg-emerald-600 animate-pulse"></span>
             <span className="label-caps">GATEWAY:</span>
             <span className="text-[11px] font-mono text-on-surface bg-surface-dim px-2 py-0.5 border border-outline-variant">
-              HTTP/2 // 0.0.0.0:8000
+              ONLINE // 127.0.0.1:8000
             </span>
           </div>
 
@@ -64,99 +54,68 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Right Controls & Clock */}
+        {/* Right Controls & User Info */}
         <div className="flex items-center gap-4">
           <div className="hidden sm:flex items-center gap-2 text-[11px] font-mono text-on-surface-variant bg-surface-dim px-2.5 py-1 border border-outline-variant">
             <Clock className="w-3.5 h-3.5 text-on-surface-variant" />
-            <span className="tabular-nums">{time || "2026-09-28 00:00:00 UTC"}</span>
+            <span className="tabular-nums">{time || "2026-10-01 00:00:00 UTC"}</span>
           </div>
 
-          <button
-            onClick={() => setIsOpen(true)}
-            className="flex items-center gap-2 text-xs font-mono font-semibold bg-surface hover:bg-surface-dim text-on-surface px-3 py-1.5 border border-outline transition-colors"
-          >
-            <KeyRound className="w-3.5 h-3.5 text-primary" />
-            <span>GATEWAY AUTH</span>
-          </button>
+          {user && (
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-2 text-xs font-mono font-semibold bg-surface hover:bg-surface-dim text-on-surface px-3 py-1.5 border border-outline transition-colors"
+              >
+                <User className="w-3.5 h-3.5 text-primary" />
+                <span className="max-w-[150px] truncate">{user.email}</span>
+                <ChevronDown className="w-3 h-3 text-slate-400" />
+              </button>
+
+              {showUserMenu && (
+                <div className="absolute right-0 mt-1 w-64 bg-surface border border-outline shadow-lg z-50 p-2 font-mono text-xs">
+                  <div className="px-2 py-1.5 border-b border-outline-variant">
+                    <p className="font-bold text-on-surface truncate">{user.name}</p>
+                    <p className="text-[10px] text-on-surface-variant truncate">{user.email}</p>
+                  </div>
+
+                  {workspaces.length > 1 && (
+                    <div className="py-1.5 border-b border-outline-variant">
+                      <p className="px-2 text-[9px] uppercase tracking-wider text-slate-400 font-bold mb-1">Switch Workspace</p>
+                      {workspaces.map((ws) => (
+                        <button
+                          key={ws.id}
+                          onClick={() => {
+                            switchWorkspace(ws.id);
+                            setShowUserMenu(false);
+                          }}
+                          className={`w-full text-left px-2 py-1 text-xs truncate flex items-center justify-between hover:bg-surface-dim ${
+                            activeWorkspace?.id === ws.id ? "text-primary font-bold" : "text-on-surface"
+                          }`}
+                        >
+                          <span className="truncate">{ws.name}</span>
+                          {activeWorkspace?.id === ws.id && <span className="text-[10px]">ACTIVE</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      logout();
+                    }}
+                    className="w-full text-left px-2 py-1.5 text-rose-600 hover:bg-rose-50 flex items-center gap-2 mt-1"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
-
-      {/* Technical Key Modal */}
-      {isOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[1px] z-50 flex items-center justify-center p-4">
-          <div className="bg-surface border-2 border-on-surface w-full max-w-lg p-6 shadow-none space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-outline">
-              <div className="flex items-center gap-2.5">
-                <ShieldCheck className="w-5 h-5 text-primary" />
-                <div>
-                  <h3 className="text-sm font-display font-bold text-on-surface uppercase tracking-wider">
-                    GATEWAY ACCESS CREDENTIALS
-                  </h3>
-                  <p className="text-[11px] font-mono text-on-surface-variant">
-                    Scoped API authorization for tenant inference and master provisioning
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="text-on-surface-variant hover:text-on-surface p-1 hover:bg-surface-dim transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs font-mono">
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <label className="text-on-surface-variant uppercase tracking-wider text-[10px] font-semibold">
-                    TENANT INFERENCE KEY (`X-API-Key` or `Bearer`)
-                  </label>
-                  <span className="text-[10px] text-primary font-semibold">INFERENCE SCOPE</span>
-                </div>
-                <input
-                  type="text"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="cm_live_..."
-                  className="w-full bg-surface border border-outline px-3 py-2 text-on-surface font-mono text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <label className="text-on-surface-variant uppercase tracking-wider text-[10px] font-semibold">
-                    MASTER ADMIN SECRET (`/v1/admin/*` & `/v1/cache/*`)
-                  </label>
-                  <span className="text-[10px] text-amber-700 font-semibold">ADMIN SCOPE</span>
-                </div>
-                <input
-                  type="password"
-                  value={adminKey}
-                  onChange={(e) => setAdminKey(e.target.value)}
-                  placeholder="cm_admin_..."
-                  className="w-full bg-surface border border-outline px-3 py-2 text-on-surface font-mono text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                />
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-outline flex justify-end gap-2.5 font-mono text-xs">
-              <button
-                onClick={() => setIsOpen(false)}
-                className="btn-secondary"
-              >
-                DISMISS
-              </button>
-              <button
-                onClick={handleSaveKeys}
-                className="btn-primary flex items-center gap-1.5"
-              >
-                <Check className="w-3.5 h-3.5" />
-                SAVE CREDENTIALS
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
