@@ -102,6 +102,19 @@ class Settings(BaseSettings):
     # Master Admin Key for /v1/admin/* management
     ADMIN_MASTER_KEY: str = "cm_admin_master_secret_key_9999999999999999"
 
+    # Session & Cookie Security
+    SESSION_COOKIE_NAME: str = "cachemind_session"
+    SESSION_COOKIE_MAX_AGE: int = 60 * 60 * 24 * 7  # 7 days in seconds
+    SESSION_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
+    SESSION_COOKIE_SECURE: bool | None = None  # Auto-configured to True if production, False otherwise
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://localhost:8000",
+    ]
+
     # Development / Testing Keys
     DEV_TENANT_ID: str = "tenant_default"
     DEV_PROJECT_ID: str = "proj_default"

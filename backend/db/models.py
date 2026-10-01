@@ -12,6 +12,7 @@ from sqlalchemy import (
     JSON,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -26,6 +27,22 @@ def generate_uuid() -> str:
     return str(uuid.uuid4())
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String(64), primary_key=True, default=generate_uuid)
+    email = Column(String(255), nullable=False, unique=True, index=True)
+    password_hash = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_superuser = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+    memberships = relationship("TenantMembership", back_populates="user", cascade="all, delete-orphan")
+    sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
 
@@ -35,6 +52,42 @@ class Tenant(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     projects = relationship("Project", back_populates="tenant", cascade="all, delete-orphan")
+    memberships = relationship("TenantMembership", back_populates="tenant", cascade="all, delete-orphan")
+
+
+class TenantMembership(Base):
+    __tablename__ = "tenant_memberships"
+
+    id = Column(String(64), primary_key=True, default=generate_uuid)
+    user_id = Column(String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id = Column(String(64), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(32), nullable=False, default="member")  # owner, admin, member
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    user = relationship("User", back_populates="memberships")
+    tenant = relationship("Tenant", back_populates="memberships")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "tenant_id", name="uq_user_tenant_membership"),
+        Index("ix_tenant_memberships_user_tenant", "user_id", "tenant_id"),
+    )
+
+
+class Session(Base):
+    __tablename__ = "sessions"
+
+    id = Column(String(64), primary_key=True, default=generate_uuid)
+    session_token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    user_id = Column(String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    active_tenant_id = Column(String(64), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    last_activity_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
+
+    user = relationship("User", back_populates="sessions")
+    active_tenant = relationship("Tenant")
 
 
 class Project(Base):
@@ -131,4 +184,3 @@ class SemanticVectorEntry(Base):
         Index("ix_semantic_scope_created", "scope_hash", "created_at"),
         Index("ix_semantic_tenant_scope", "tenant_id", "scope_hash"),
     )
-
