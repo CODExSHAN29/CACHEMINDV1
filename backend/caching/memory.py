@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import time
 from typing import Dict, Optional, Tuple
 
 from backend.caching.backend import ExactCacheBackend
@@ -13,7 +14,14 @@ class InMemoryExactCache(ExactCacheBackend):
 
     def __init__(self) -> None:
         self._store: Dict[str, Tuple[CachedResponse, float]] = {}  # key -> (payload, expire_at)
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        """Lazy lock creation ensures binding to the current event loop."""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     def _make_key(self, project_id: str, exact_request_hash: str) -> str:
         return f"cm:v1:exact:{project_id}:{exact_request_hash}"
@@ -22,12 +30,12 @@ class InMemoryExactCache(ExactCacheBackend):
         self, project_id: str, exact_request_hash: str
     ) -> Optional[CachedResponse]:
         key = self._make_key(project_id, exact_request_hash)
-        async with self._lock:
+        async with self.lock:
             entry = self._store.get(key)
             if not entry:
                 return None
             cached_resp, expire_at = entry
-            if asyncio.get_event_loop().time() > expire_at:
+            if time.time() > expire_at:
                 del self._store[key]
                 return None
             # Return deepcopy to ensure isolation
@@ -42,14 +50,14 @@ class InMemoryExactCache(ExactCacheBackend):
     ) -> None:
         key = self._make_key(project_id, exact_request_hash)
         ttl = ttl_seconds if ttl_seconds is not None else payload.ttl_seconds
-        expire_at = asyncio.get_event_loop().time() + ttl
+        expire_at = time.time() + ttl
 
-        async with self._lock:
+        async with self.lock:
             self._store[key] = (copy.deepcopy(payload), expire_at)
 
     async def delete(self, project_id: str, exact_request_hash: str) -> bool:
         key = self._make_key(project_id, exact_request_hash)
-        async with self._lock:
+        async with self.lock:
             if key in self._store:
                 del self._store[key]
                 return True
@@ -59,7 +67,7 @@ class InMemoryExactCache(ExactCacheBackend):
         self, project_id: str, exact_request_hash: str
     ) -> int:
         key = self._make_key(project_id, exact_request_hash)
-        async with self._lock:
+        async with self.lock:
             if key in self._store:
                 cached_resp, expire_at = self._store[key]
                 cached_resp.hit_count += 1
@@ -72,7 +80,7 @@ class InMemoryExactCache(ExactCacheBackend):
     async def purge_project(self, project_id: str) -> int:
         prefix = f"cm:v1:exact:{project_id}:"
         deleted_count = 0
-        async with self._lock:
+        async with self.lock:
             keys_to_delete = [k for k in self._store.keys() if k.startswith(prefix)]
             for k in keys_to_delete:
                 del self._store[k]
@@ -81,12 +89,12 @@ class InMemoryExactCache(ExactCacheBackend):
 
     async def list_keys(self, project_id: str, limit: int = 100) -> list[str]:
         prefix = f"cm:v1:exact:{project_id}:"
-        async with self._lock:
+        async with self.lock:
             keys = [
                 k[len(prefix):] for k in self._store.keys() if k.startswith(prefix)
             ]
             return keys[:limit]
 
     async def clear(self) -> None:
-        async with self._lock:
+        async with self.lock:
             self._store.clear()

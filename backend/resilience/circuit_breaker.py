@@ -46,7 +46,14 @@ class CircuitBreaker:
         self._consecutive_successes: int = 0
         self._opened_at: Optional[float] = None
         self._last_state_change: float = time.time()
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        """Lazy lock creation ensures binding to the current event loop."""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     @property
     def state(self) -> CircuitState:
@@ -61,7 +68,7 @@ class CircuitBreaker:
         Determines whether a request should be dispatched to the target upstream.
         Transitions from OPEN to HALF_OPEN when recovery cooldown expires.
         """
-        async with self._lock:
+        async with self.lock:
             if self._state == CircuitState.CLOSED:
                 return True
 
@@ -90,7 +97,7 @@ class CircuitBreaker:
         Records a successful upstream call.
         If in HALF_OPEN mode, transitions back to CLOSED once threshold met.
         """
-        async with self._lock:
+        async with self.lock:
             now = time.time()
             if self._state == CircuitState.HALF_OPEN:
                 self._consecutive_successes += 1
@@ -114,7 +121,7 @@ class CircuitBreaker:
         Records an upstream error (429, 5xx, timeout).
         Trips CLOSED -> OPEN if threshold is reached, or HALF_OPEN -> OPEN immediately.
         """
-        async with self._lock:
+        async with self.lock:
             now = time.time()
             self._failure_count += 1
             if self._state == CircuitState.HALF_OPEN:
@@ -139,7 +146,7 @@ class CircuitBreaker:
 
     async def reset(self) -> None:
         """Force reset to CLOSED state."""
-        async with self._lock:
+        async with self.lock:
             self._state = CircuitState.CLOSED
             self._failure_count = 0
             self._consecutive_successes = 0
@@ -154,7 +161,14 @@ class CircuitBreakerRegistry:
 
     def __init__(self) -> None:
         self._breakers: Dict[str, CircuitBreaker] = {}
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        """Lazy lock creation ensures binding to the current event loop."""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     def get_breaker(
         self,

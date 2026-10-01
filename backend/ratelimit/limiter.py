@@ -23,7 +23,14 @@ class InMemoryTokenBucket:
         self.token_tokens = float(tpm_limit)
 
         self.last_refill = time.time()
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        """Lazy lock creation ensures binding to the current event loop."""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     def _refill(self, now: float) -> None:
         elapsed = now - self.last_refill
@@ -48,7 +55,7 @@ class InMemoryTokenBucket:
         Attempts to consume 1 request token and estimated LLM tokens.
         Returns: (allowed, remaining_rpm, remaining_tpm, retry_after)
         """
-        async with self._lock:
+        async with self.lock:
             now = time.time()
             self._refill(now)
 
@@ -94,7 +101,14 @@ class RateLimiter:
 
     def __init__(self) -> None:
         self._buckets: Dict[str, InMemoryTokenBucket] = {}
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        """Lazy lock creation ensures binding to the current event loop."""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     def _get_bucket_key(self, tenant_id: str, project_id: str) -> str:
         return f"{tenant_id}:{project_id}"
@@ -107,7 +121,7 @@ class RateLimiter:
         tpm_limit: Optional[int] = None,
     ) -> InMemoryTokenBucket:
         key = self._get_bucket_key(tenant_id, project_id)
-        async with self._lock:
+        async with self.lock:
             if key not in self._buckets:
                 rpm = rpm_limit or settings.DEFAULT_RPM_LIMIT
                 tpm = tpm_limit or settings.DEFAULT_TPM_LIMIT
@@ -186,7 +200,7 @@ class RateLimiter:
 
     async def reset(self, tenant_id: Optional[str] = None) -> None:
         """Resets all or specific tenant buckets."""
-        async with self._lock:
+        async with self.lock:
             self.reset_sync(tenant_id)
 
 

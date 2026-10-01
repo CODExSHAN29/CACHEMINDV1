@@ -95,7 +95,7 @@ class EmbeddingEngine:
             List of 384 floats (L2-normalized for cosine similarity)
         """
         # Run in thread pool to avoid blocking event loop
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._embed_sync, text)
 
     def _embed_sync(self, text: str) -> List[float]:
@@ -134,7 +134,7 @@ class EmbeddingEngine:
         Returns:
             List of 384-dim float lists
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._embed_batch_sync, texts)
 
     def _embed_batch_sync(self, texts: List[str]) -> List[List[float]]:

@@ -109,6 +109,10 @@ def setup_test_singletons():
     set_rate_limiter(limiter)
     get_circuit_breaker_registry().reset_all()
 
+    # Request coalescer reset
+    from backend.caching.coalescer import RequestCoalescer, set_request_coalescer
+    set_request_coalescer(RequestCoalescer())
+
     return mem_cache, mock_prov
 
 

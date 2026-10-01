@@ -164,7 +164,7 @@ class VectorIndex:
             response_payload: Cached upstream response dict
             created_at: Unix timestamp when this entry was created
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._insert_sync, scope_hash, exact_request_hash, vector, response_payload, created_at)
 
     def _insert_sync(
@@ -234,7 +234,7 @@ class VectorIndex:
             List of SemanticCandidate, sorted by similarity descending.
             Only candidates with similarity >= threshold are included.
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._search_sync, query_vector, scope_hash, top_k)
 
     def _search_sync(
@@ -295,7 +295,7 @@ class VectorIndex:
 
         Less common; the primary use case is search-within-scope.
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._search_cross_scope_sync, query_vector, top_k)
 
     def _search_cross_scope_sync(
@@ -343,7 +343,7 @@ class VectorIndex:
 
         Returns True if found and deleted, False otherwise.
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._delete_sync, exact_request_hash)
 
     def _delete_sync(self, exact_request_hash: str) -> bool:
@@ -370,7 +370,7 @@ class VectorIndex:
 
     async def delete_by_scope(self, scope_hash: str) -> int:
         """Delete all entries under a scope hash."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._delete_by_scope_sync, scope_hash)
 
     def _delete_by_scope_sync(self, scope_hash: str) -> int:
@@ -392,7 +392,7 @@ class VectorIndex:
 
     async def get_stats(self) -> Dict[str, Any]:
         """Returns statistics on stored vectors and partitions."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._get_stats_sync)
 
     def _get_stats_sync(self) -> Dict[str, Any]:
@@ -405,7 +405,7 @@ class VectorIndex:
 
     async def clear(self) -> None:
         """Clear all entries."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._clear_sync)
 
     def _clear_sync(self) -> None:
@@ -418,7 +418,7 @@ class VectorIndex:
 
     async def ping(self) -> bool:
         """Health check."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._ping_sync)
 
     def _ping_sync(self) -> bool:
