@@ -65,33 +65,33 @@ jobs:
 
       - name: Verify application import and config
         env:
-          ENVIRONMENT: test
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
-          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: "test"
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          REDIS_URL: "redis://localhost:6379/0"
         run: |
           python -c "from backend.app.main import app; print('CacheMind FastAPI Application Import OK')"
 
       - name: Run unit test suite
         env:
-          ENVIRONMENT: test
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
-          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: "test"
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          REDIS_URL: "redis://localhost:6379/0"
         run: |
           python -m pytest backend/tests/unit -v --tb=short
 
       - name: Run integration test suite
         env:
-          ENVIRONMENT: test
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
-          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: "test"
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          REDIS_URL: "redis://localhost:6379/0"
         run: |
           python -m pytest backend/tests/integration -v --tb=short
 
       - name: Validate database schema migrations (PostgreSQL + pgvector)
         env:
-          ENVIRONMENT: test
-          DATABASE_URL: postgresql+asyncpg://cachemind:cachemind@localhost:5432/cachemind_test
-          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: "test"
+          DATABASE_URL: "postgresql+asyncpg://cachemind:cachemind@localhost:5432/cachemind_test"
+          REDIS_URL: "redis://localhost:6379/0"
         run: |
           alembic -c alembic.ini upgrade head
           python scripts/verify_migrations.py
