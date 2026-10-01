@@ -260,7 +260,7 @@ def print_evaluation_report(results: Dict[str, Any]) -> None:
     arb = results["guardrail_arbiter"]["overall"]
 
     print("\n" + "=" * 90)
-    print(f" 🛡️ CACHEMIND SEMANTIC SAFETY EVALUATION (Threshold τ = {t:.2f})")
+    print(f" [!] CACHEMIND SEMANTIC SAFETY EVALUATION (Threshold tau = {t:.2f})")
     print("=" * 90)
     print(f"{'Metric':<28} | {'Raw Cosine Alone':>18} | {'CacheMind Guardrails':>22} | {'Delta':>12}")
     print("-" * 90)
@@ -286,7 +286,7 @@ def print_evaluation_report(results: Dict[str, Any]) -> None:
             print(f"{label:<28} | {val_raw:14d}{unit} | {val_arb:18d}{unit} | {sign}{delta:8d}")
 
     print("=" * 90)
-    print(" 🔍 VULNERABILITY BREAKDOWN BY CRITICAL FAILURE CATEGORY (False Positive Rate %):")
+    print(" [*] VULNERABILITY BREAKDOWN BY CRITICAL FAILURE CATEGORY (False Positive Rate %):")
     print(f"{'Category':<24} | {'Raw Cosine FPR':>16} | {'Guardrail Arbiter FPR':>22} | {'Safety Defense':>15}")
     print("-" * 90)
 
