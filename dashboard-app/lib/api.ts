@@ -1,5 +1,6 @@
 import {
   DashboardSummary,
+  AnalyticsOverview, TimeseriesPoint, RequestLog, ModelMetrics,
   TenantInfo,
   ProjectInfo,
   APIKeyInfo,
@@ -129,6 +130,27 @@ export const api = {
     return req<any>(`/v1/analytics/timeseries?${params.toString()}`);
   },
 
+  async getOverview(tenantId: string, projectId?: string): Promise<AnalyticsOverview> {
+    const params = new URLSearchParams({ tenant_id: tenantId });
+    if (projectId) params.set("project_id", projectId);
+    return req(`/v1/analytics/overview?${params}`);
+  },
+  async getRequestLogs(tenantId: string, projectId?: string): Promise<{ items: RequestLog[] }> {
+    const params = new URLSearchParams({ tenant_id: tenantId, limit: "20" });
+    if (projectId) params.set("project_id", projectId);
+    return req(`/v1/analytics/logs?${params}`);
+  },
+  async getTimeseries(tenantId: string, projectId?: string): Promise<TimeseriesPoint[]> {
+    const params = new URLSearchParams({ tenant_id: tenantId, points: "24" });
+    if (projectId) params.set("project_id", projectId);
+    return req(`/v1/analytics/timeseries?${params}`);
+  },
+  async getModelMetrics(tenantId: string, projectId?: string): Promise<ModelMetrics[]> {
+    const params = new URLSearchParams({ tenant_id: tenantId });
+    if (projectId) params.set("project_id", projectId);
+    return req(`/v1/analytics/models?${params}`);
+  },
+
   // 3. Cache Management & Invalidation
   async purgeCache(params: {
     tenant_id?: string;
@@ -144,11 +166,11 @@ export const api = {
   },
 
   async inspectCacheKey(keyHash: string): Promise<any> {
-    return req<any>(`/v1/cache/inspect/${keyHash}`);
+    return req<any>(`/v1/cache/inspect/${encodeURIComponent(keyHash)}`);
   },
 
   async deleteCacheKey(keyHash: string): Promise<void> {
-    await req<void>(`/v1/cache/keys/${keyHash}`, { method: "DELETE" });
+    await req<void>(`/v1/cache/keys/${encodeURIComponent(keyHash)}`, { method: "DELETE" });
   },
 
   async warmCache(
@@ -175,7 +197,7 @@ export const api = {
   async listPlans(): Promise<BillingPlan[]> {
     const data = await req<any>("/v1/billing/plans");
     if (Array.isArray(data)) return data;
-    if (data.plans) return Array.isArray(data.plans) ? data.plans : Object.values(data.plans);
+    if (data.plans) return Array.isArray(data.plans) ? data.plans : Object.entries(data.plans).map(([tier, plan]) => ({ ...(plan as BillingPlan), tier } as BillingPlan));
     return [];
   },
 
@@ -226,11 +248,11 @@ export const api = {
     const data = await res.json();
     return {
       ...data,
-      cache_status: (res.headers.get("x-cachemind-cache") || "CACHE_MISS") as any,
+      cache_status: res.headers.get("x-cachemind-cache") ?? undefined,
       latency_ms,
-      tokens_saved: parseInt(res.headers.get("x-cachemind-tokens-saved") || "0", 10),
-      cost_saved_usd: parseFloat(res.headers.get("x-cachemind-cost-saved") || "0"),
-      semantic_score: parseFloat(res.headers.get("x-cachemind-similarity") || "0"),
+      tokens_saved: res.headers.has("x-cachemind-tokens-saved") ? parseInt(res.headers.get("x-cachemind-tokens-saved")!, 10) : undefined,
+      cost_saved_usd: res.headers.has("x-cachemind-cost-saved") ? parseFloat(res.headers.get("x-cachemind-cost-saved")!) : undefined,
+      semantic_score: res.headers.has("x-cachemind-similarity") ? parseFloat(res.headers.get("x-cachemind-similarity")!) : undefined,
     };
   },
 };

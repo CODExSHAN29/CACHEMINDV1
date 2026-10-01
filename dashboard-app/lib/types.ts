@@ -100,9 +100,28 @@ export interface PlaygroundResponse {
     completion_tokens: number;
     total_tokens: number;
   };
-  cache_status?: "EXACT_HIT" | "SEMANTIC_HIT" | "CACHE_MISS";
+  cache_status?: "EXACT_HIT" | "SEMANTIC_HIT" | "CACHE_MISS" | "L2_HIT" | "MISS" | string;
   latency_ms?: number;
   semantic_score?: number;
   tokens_saved?: number;
   cost_saved_usd?: number;
+}
+
+export interface AnalyticsOverview {
+  total_requests: number; exact_hits: number; semantic_hits: number; misses: number;
+  hit_rate_pct: number; tokens_saved: number; estimated_cost_saved_usd: number;
+  avg_gateway_latency_ms: number; avg_upstream_latency_ms: number; avg_cache_lookup_ms: number;
+}
+export interface TimeseriesPoint {
+  timestamp: string; total_requests: number; exact_hits: number; semantic_hits: number;
+  misses: number; avg_latency_ms: number; tokens_saved: number; cost_saved_usd: number;
+}
+export interface RequestLog {
+  request_id: string; requested_model: string; actual_model: string; provider: string;
+  cache_status: string; similarity_score: number | null; gateway_latency_ms: number;
+  upstream_called: boolean; created_at: string; exact_request_hash: string;
+}
+export interface ModelMetrics {
+  model: string; provider: string; total_requests: number; hit_rate_pct: number;
+  cost_saved_usd: number; avg_latency_ms: number;
 }
