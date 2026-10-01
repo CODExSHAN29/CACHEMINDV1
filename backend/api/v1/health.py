@@ -8,6 +8,7 @@ from backend.app.config import settings
 from backend.caching.factory import get_cache_backend
 from backend.db.session import AsyncSessionLocal
 from backend.semantic.embedding import get_embedding_engine
+from backend.semantic.factory import SemanticCacheFactory
 
 router = APIRouter(tags=["Health & Probes"])
 
@@ -109,7 +110,34 @@ async def readiness_check() -> JSONResponse:
             "error": str(e),
         }
 
-    # 4. Provider Configuration Readiness (Check keys exist without external network call)
+    # 4. Semantic Vector Backend Check (L2)
+    backend_start = time.perf_counter()
+    try:
+        vec_backend = SemanticCacheFactory.get_vector_backend()
+        backend_ok = await vec_backend.ping() if hasattr(vec_backend, "ping") else True
+        backend_duration = (time.perf_counter() - backend_start) * 1000
+        if backend_ok:
+            components["semantic_backend"] = {
+                "status": "healthy",
+                "backend": settings.VECTOR_BACKEND,
+                "latency_ms": round(backend_duration, 2),
+            }
+        else:
+            is_ready = False
+            components["semantic_backend"] = {
+                "status": "unhealthy",
+                "backend": settings.VECTOR_BACKEND,
+                "error": "Semantic vector backend ping returned False",
+            }
+    except Exception as e:
+        is_ready = False
+        components["semantic_backend"] = {
+            "status": "unhealthy",
+            "backend": settings.VECTOR_BACKEND,
+            "error": str(e),
+        }
+
+    # 5. Provider Configuration Readiness (Check keys exist without external network call)
     configured_providers = []
     if settings.OPENAI_API_KEY:
         configured_providers.append("openai")

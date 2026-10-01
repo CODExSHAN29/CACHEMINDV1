@@ -55,6 +55,7 @@ class CacheManagementService:
     ) -> bool:
         """
         Surgically deletes a specific exact cache key from both L1 and L2 indices.
+        Enforces strict project authorization.
         """
         cache_backend = get_cache_backend()
         semantic_service = get_semantic_cache_service()
@@ -62,7 +63,12 @@ class CacheManagementService:
         l1_deleted = await cache_backend.delete(project_id, exact_request_hash)
         l2_deleted = False
         try:
-            l2_deleted = await semantic_service.vector_index.delete(exact_request_hash)
+            vector_entry = await semantic_service.backend.inspect_key(exact_request_hash)
+            if vector_entry and vector_entry.get("project_id") == project_id:
+                l2_deleted = await semantic_service.backend.delete(exact_request_hash)
+            elif not vector_entry and l1_deleted:
+                # If key was already purged or not indexed in L2, l1_deleted is sufficient
+                pass
         except Exception as exc:
             logger.warning("Error deleting vector entry %s: %s", exact_request_hash, exc)
 
@@ -112,15 +118,17 @@ class CacheManagementService:
         except Exception as exc:
             logger.error("Error purging L1 cache for project %s: %s", project_id, exc)
 
-        # Purge L2 Semantic Vector Index
+        # Purge L2 Semantic Vector Backend with strict project scoping
         try:
-            vector_stats = await semantic_service.vector_index.get_stats()
-            scopes = vector_stats.get("scopes", {})
-            for sh in list(scopes.keys()):
-                del_count = await semantic_service.vector_index.delete_by_scope(sh)
-                purged_l2 += del_count
+            purged_l2 = await semantic_service.backend.delete_by_scope_filters(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                model=model,
+                namespace=namespace,
+                tags=tags,
+            )
         except Exception as exc:
-            logger.error("Error purging L2 vector index for project %s: %s", project_id, exc)
+            logger.error("Error purging L2 vector backend for project %s: %s", project_id, exc)
 
         return CachePurgeResult(
             tenant_id=tenant_id,
@@ -137,6 +145,7 @@ class CacheManagementService:
     ) -> CacheKeyInspection:
         """
         Inspects metadata, TTL, hit count, and contents of a specific cached response.
+        Enforces strict project authorization across L1 and L2 layers.
         """
         cache_backend = get_cache_backend()
         cached: Optional[CachedResponse] = await cache_backend.get(
@@ -144,6 +153,35 @@ class CacheManagementService:
         )
 
         if not cached:
+            # Check L2 semantic vector backend for matching project_id
+            semantic_service = get_semantic_cache_service()
+            try:
+                v_entry = await semantic_service.backend.inspect_key(exact_request_hash)
+                if v_entry and v_entry.get("project_id") == project_id:
+                    preview = v_entry.get("input_text") or ""
+                    return CacheKeyInspection(
+                        exact_request_hash=exact_request_hash,
+                        project_id=project_id,
+                        exists=True,
+                        provider=v_entry.get("provider"),
+                        model=v_entry.get("model"),
+                        ttl_seconds=v_entry.get("ttl_seconds"),
+                        hit_count=0,
+                        namespace=v_entry.get("namespace"),
+                        tags=v_entry.get("tags") or [],
+                        response_preview=preview,
+                        content_preview=preview,
+                        usage=None,
+                        created_at=None,
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "Error inspecting L2 vector entry %s for project %s: %s",
+                    exact_request_hash,
+                    project_id,
+                    exc,
+                )
+
             return CacheKeyInspection(
                 exact_request_hash=exact_request_hash,
                 project_id=project_id,

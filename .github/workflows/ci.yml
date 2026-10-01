@@ -7,6 +7,8 @@ on:
       - master
       - 'feat/**'
       - 'feat/*'
+      - 'fix/**'
+      - 'fix/*'
   pull_request:
     branches:
       - main

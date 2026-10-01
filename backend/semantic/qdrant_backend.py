@@ -188,6 +188,45 @@ class QdrantSemanticBackend(SemanticCacheBackend):
             )
             return 1 if resp.status_code == 200 else 0
 
+    async def delete_by_project(self, tenant_id: str, project_id: str) -> int:
+        filter_must = [
+            {"key": "tenant_id", "match": {"value": tenant_id}},
+            {"key": "project_id", "match": {"value": project_id}},
+        ]
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{self.url}/collections/{self.collection_name}/points/delete",
+                json={"filter": {"must": filter_must}},
+                headers=self._get_headers(),
+            )
+            return 1 if resp.status_code == 200 else 0
+
+    async def delete_by_scope_filters(
+        self,
+        tenant_id: str,
+        project_id: Optional[str] = None,
+        model: Optional[str] = None,
+        namespace: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> int:
+        filter_must = [{"key": "tenant_id", "match": {"value": tenant_id}}]
+        if project_id is not None:
+            filter_must.append({"key": "project_id", "match": {"value": project_id}})
+        if model is not None:
+            filter_must.append({"key": "model", "match": {"value": model}})
+        if namespace is not None:
+            filter_must.append({"key": "namespace", "match": {"value": namespace}})
+        if tags:
+            for tag in tags:
+                filter_must.append({"key": "tags", "match": {"value": tag}})
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{self.url}/collections/{self.collection_name}/points/delete",
+                json={"filter": {"must": filter_must}},
+                headers=self._get_headers(),
+            )
+            return 1 if resp.status_code == 200 else 0
+
     async def delete_by_tenant(self, tenant_id: str) -> int:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post(
