@@ -414,6 +414,75 @@ class VectorIndex:
 
         return deleted_count
 
+    async def delete_by_project(self, tenant_id: str, project_id: str) -> int:
+        """Delete all entries belonging to a specific project within a tenant across all scopes."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._delete_by_project_sync, tenant_id, project_id)
+
+    def _delete_by_project_sync(self, tenant_id: str, project_id: str) -> int:
+        deleted_count = 0
+        keys_to_delete = []
+
+        for scope_hash, entries in self._entries_by_scope.items():
+            for exact_hash, entry in entries.items():
+                if entry.tenant_id == tenant_id and entry.project_id == project_id:
+                    keys_to_delete.append(exact_hash)
+
+        for exact_hash in keys_to_delete:
+            if self._delete_sync(exact_hash):
+                deleted_count += 1
+
+        return deleted_count
+
+    async def delete_by_scope_filters(
+        self,
+        tenant_id: str,
+        project_id: Optional[str] = None,
+        model: Optional[str] = None,
+        namespace: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> int:
+        """Delete entries matching specific tenant, project, and scope filters."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, self._delete_by_scope_filters_sync, tenant_id, project_id, model, namespace, tags
+        )
+
+    def _delete_by_scope_filters_sync(
+        self,
+        tenant_id: str,
+        project_id: Optional[str] = None,
+        model: Optional[str] = None,
+        namespace: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> int:
+        deleted_count = 0
+        keys_to_delete = []
+
+        for scope_hash, entries in self._entries_by_scope.items():
+            for exact_hash, entry in entries.items():
+                if entry.tenant_id != tenant_id:
+                    continue
+                if project_id is not None and entry.project_id != project_id:
+                    continue
+                if model is not None and entry.model != model:
+                    continue
+                if namespace is not None and entry.namespace != namespace:
+                    continue
+                if tags:
+                    entry_tags = set(entry.tags or [])
+                    if not set(tags).issubset(entry_tags):
+                        continue
+                    keys_to_delete.append(exact_hash)
+                else:
+                    keys_to_delete.append(exact_hash)
+
+        for exact_hash in keys_to_delete:
+            if self._delete_sync(exact_hash):
+                deleted_count += 1
+
+        return deleted_count
+
     async def delete_by_tenant(self, tenant_id: str) -> int:
         """Delete all entries belonging to a specific tenant across all scopes."""
         loop = asyncio.get_running_loop()
@@ -552,7 +621,7 @@ class MockVectorIndex:
     def __init__(self, dim: int = 384, threshold: float = 0.92) -> None:
         self._dim = dim
         self._threshold = threshold
-        self._entries: Dict[str, Tuple[List[float], Dict[str, Any], float, Optional[str]]] = {}
+        self._entries: Dict[str, Dict[str, Any]] = {}
 
     async def insert(
         self,
@@ -571,7 +640,17 @@ class MockVectorIndex:
         namespace: Optional[str] = None,
         tags: Optional[List[str]] = None,
     ) -> None:
-        self._entries[exact_request_hash] = (vector, response_payload, created_at, tenant_id)
+        self._entries[exact_request_hash] = {
+            "vector": vector,
+            "response_payload": response_payload,
+            "created_at": created_at,
+            "tenant_id": tenant_id,
+            "project_id": project_id,
+            "model": model,
+            "namespace": namespace,
+            "tags": tags,
+            "scope_hash": scope_hash,
+        }
 
     async def search(
         self,
@@ -582,7 +661,10 @@ class MockVectorIndex:
     ) -> List[SemanticCandidate]:
         threshold = similarity_threshold if similarity_threshold is not None else self._threshold
         candidates = []
-        for exact_hash, (stored_vec, payload, created_at, _) in self._entries.items():
+        for exact_hash, entry in self._entries.items():
+            stored_vec = entry["vector"]
+            payload = entry["response_payload"]
+            created_at = entry["created_at"]
             vec_a = np.array(query_vector, dtype=np.float32)
             vec_b = np.array(stored_vec, dtype=np.float32)
             norm_a = np.linalg.norm(vec_a)
@@ -607,22 +689,65 @@ class MockVectorIndex:
         return False
 
     async def delete_by_scope(self, scope_hash: str) -> int:
-        return 0
+        keys_to_del = [k for k, v in self._entries.items() if v.get("scope_hash") == scope_hash]
+        for k in keys_to_del:
+            del self._entries[k]
+        return len(keys_to_del)
+
+    async def delete_by_project(self, tenant_id: str, project_id: str) -> int:
+        keys_to_del = [
+            k for k, v in self._entries.items()
+            if v.get("tenant_id") == tenant_id and v.get("project_id") == project_id
+        ]
+        for k in keys_to_del:
+            del self._entries[k]
+        return len(keys_to_del)
+
+    async def delete_by_scope_filters(
+        self,
+        tenant_id: str,
+        project_id: Optional[str] = None,
+        model: Optional[str] = None,
+        namespace: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> int:
+        keys_to_del = []
+        for k, v in self._entries.items():
+            if v.get("tenant_id") != tenant_id:
+                continue
+            if project_id is not None and v.get("project_id") != project_id:
+                continue
+            if model is not None and v.get("model") != model:
+                continue
+            if namespace is not None and v.get("namespace") != namespace:
+                continue
+            if tags:
+                item_tags = set(v.get("tags") or [])
+                if not set(tags).issubset(item_tags):
+                    continue
+            keys_to_del.append(k)
+        for k in keys_to_del:
+            del self._entries[k]
+        return len(keys_to_del)
 
     async def delete_by_tenant(self, tenant_id: str) -> int:
-        keys_to_del = [k for k, v in self._entries.items() if v[3] == tenant_id]
+        keys_to_del = [k for k, v in self._entries.items() if v.get("tenant_id") == tenant_id]
         for k in keys_to_del:
             del self._entries[k]
         return len(keys_to_del)
 
     async def inspect_key(self, exact_request_hash: str) -> Optional[Dict[str, Any]]:
         if exact_request_hash in self._entries:
-            _, payload, created_at, tenant_id = self._entries[exact_request_hash]
+            entry = self._entries[exact_request_hash]
             return {
                 "id": exact_request_hash,
                 "exact_request_hash": exact_request_hash,
-                "tenant_id": tenant_id,
-                "created_at": str(created_at),
+                "tenant_id": entry.get("tenant_id"),
+                "project_id": entry.get("project_id"),
+                "model": entry.get("model"),
+                "namespace": entry.get("namespace"),
+                "tags": entry.get("tags"),
+                "created_at": str(entry.get("created_at")),
                 "has_embedding": True,
             }
         return None

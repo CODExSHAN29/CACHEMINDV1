@@ -253,6 +253,66 @@ class PgVectorSemanticBackend(SemanticCacheBackend):
             await session.commit()
             return result.rowcount
 
+    async def delete_by_project(self, tenant_id: str, project_id: str) -> int:
+        """Deletes all entries belonging to a specific project within a tenant."""
+        async with self.session_factory() as session:
+            stmt = delete(SemanticVectorEntry).where(
+                SemanticVectorEntry.tenant_id == tenant_id,
+                SemanticVectorEntry.project_id == project_id,
+            )
+            result = await session.execute(stmt)
+            await session.commit()
+            return result.rowcount
+
+    async def delete_by_scope_filters(
+        self,
+        tenant_id: str,
+        project_id: Optional[str] = None,
+        model: Optional[str] = None,
+        namespace: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> int:
+        """Deletes entries matching specific tenant, project, and scope filters."""
+        async with self.session_factory() as session:
+            if not tags:
+                stmt = delete(SemanticVectorEntry).where(
+                    SemanticVectorEntry.tenant_id == tenant_id
+                )
+                if project_id is not None:
+                    stmt = stmt.where(SemanticVectorEntry.project_id == project_id)
+                if model is not None:
+                    stmt = stmt.where(SemanticVectorEntry.model == model)
+                if namespace is not None:
+                    stmt = stmt.where(SemanticVectorEntry.namespace == namespace)
+                result = await session.execute(stmt)
+                await session.commit()
+                return result.rowcount
+            else:
+                stmt = select(SemanticVectorEntry).where(
+                    SemanticVectorEntry.tenant_id == tenant_id
+                )
+                if project_id is not None:
+                    stmt = stmt.where(SemanticVectorEntry.project_id == project_id)
+                if model is not None:
+                    stmt = stmt.where(SemanticVectorEntry.model == model)
+                if namespace is not None:
+                    stmt = stmt.where(SemanticVectorEntry.namespace == namespace)
+                result = await session.execute(stmt)
+                entries = result.scalars().all()
+                to_delete_ids = []
+                for entry in entries:
+                    entry_tags = set(entry.tags or [])
+                    if set(tags).issubset(entry_tags):
+                        to_delete_ids.append(entry.id)
+                if to_delete_ids:
+                    del_stmt = delete(SemanticVectorEntry).where(
+                        SemanticVectorEntry.id.in_(to_delete_ids)
+                    )
+                    del_res = await session.execute(del_stmt)
+                    await session.commit()
+                    return del_res.rowcount
+                return 0
+
     async def delete_by_tenant(self, tenant_id: str) -> int:
         """Deletes all entries belonging to a tenant."""
         async with self.session_factory() as session:

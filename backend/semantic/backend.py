@@ -55,6 +55,21 @@ class SemanticCacheBackend(Protocol):
         """Deletes all entries within a specific scope hash."""
         ...
 
+    async def delete_by_project(self, tenant_id: str, project_id: str) -> int:
+        """Deletes all vector entries belonging to a specific project within a tenant."""
+        ...
+
+    async def delete_by_scope_filters(
+        self,
+        tenant_id: str,
+        project_id: Optional[str] = None,
+        model: Optional[str] = None,
+        namespace: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> int:
+        """Deletes vector entries matching specific tenant, project, and scope filters."""
+        ...
+
     async def delete_by_tenant(self, tenant_id: str) -> int:
         """Deletes all vector entries belonging to a tenant."""
         ...

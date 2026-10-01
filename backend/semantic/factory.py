@@ -310,6 +310,27 @@ class SemanticCacheService(SemanticCacheBackend):
         """Deletes all entries matching scope_hash from backend."""
         return await self.backend.delete_by_scope(scope_hash)
 
+    async def delete_by_project(self, tenant_id: str, project_id: str) -> int:
+        """Deletes all vector entries belonging to a specific project within a tenant."""
+        return await self.backend.delete_by_project(tenant_id, project_id)
+
+    async def delete_by_scope_filters(
+        self,
+        tenant_id: str,
+        project_id: Optional[str] = None,
+        model: Optional[str] = None,
+        namespace: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> int:
+        """Deletes vector entries matching specific tenant, project, and scope filters."""
+        return await self.backend.delete_by_scope_filters(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            model=model,
+            namespace=namespace,
+            tags=tags,
+        )
+
     async def delete_by_tenant(self, tenant_id: str) -> int:
         """Deletes all entries matching tenant_id from backend."""
         return await self.backend.delete_by_tenant(tenant_id)
