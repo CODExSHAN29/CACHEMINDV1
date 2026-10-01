@@ -4,7 +4,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.db.models import APIKey, Project, RequestLog, Tenant, utc_now
+from backend.db.models import APIKey, Project, RequestLog, Tenant, generate_uuid, utc_now
 
 
 class TenantRepository:
@@ -163,6 +163,7 @@ class RequestLogRepository:
         created_at: Optional[datetime] = None,
     ) -> RequestLog:
         log = RequestLog(
+            id=generate_uuid(),
             request_id=request_id,
             tenant_id=tenant_id,
             project_id=project_id,
@@ -184,7 +185,6 @@ class RequestLogRepository:
         )
         self.session.add(log)
         await self.session.commit()
-        await self.session.refresh(log)
         return log
 
     async def get_by_request_id(self, request_id: str) -> Optional[RequestLog]:

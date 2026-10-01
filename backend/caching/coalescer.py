@@ -8,6 +8,7 @@ await the leader's completion and reuse the resulting response.
 
 import asyncio
 import logging
+import time
 from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, TypeVar
 
 logger = logging.getLogger(__name__)
@@ -29,8 +30,10 @@ class RequestCoalescer:
     Ensures only one execution is active per key at any given time.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, recent_ttl: float = 2.0) -> None:
         self._calls: Dict[str, Call] = {}
+        self._recent_results: Dict[str, Tuple[Any, float]] = {}  # key -> (result, timestamp)
+        self._recent_ttl = recent_ttl
         self._lock: Optional[asyncio.Lock] = None
 
     @property
@@ -57,12 +60,21 @@ class RequestCoalescer:
             this caller waited on another leader's execution.
         """
         async with self.lock:
+            now = time.time()
+            # Clean expired recent results
+            expired_keys = [k for k, (_, ts) in self._recent_results.items() if now - ts > self._recent_ttl]
+            for k in expired_keys:
+                del self._recent_results[k]
+
             if key in self._calls:
                 call = self._calls[key]
                 call.shared_count += 1
                 logger.debug("Coalescing in-flight request for key: %s (waiting count: %d)", key, call.shared_count)
-                # Release lock while waiting for the leader future
                 is_leader = False
+            elif key in self._recent_results:
+                val, _ = self._recent_results[key]
+                logger.debug("Coalescing from recently completed in-flight request for key: %s", key)
+                return val, True
             else:
                 call = Call(loop=asyncio.get_running_loop())
                 self._calls[key] = call
@@ -76,6 +88,8 @@ class RequestCoalescer:
         # We are the leader: execute the work
         try:
             val = await coroutine_fn()
+            async with self.lock:
+                self._recent_results[key] = (val, time.time())
             call.future.set_result(val)
             return val, False
         except Exception as exc:
@@ -90,6 +104,14 @@ class RequestCoalescer:
         """Returns True if a request for this key is currently in-flight."""
         return key in self._calls
 
+    def is_recent(self, key: str) -> bool:
+        """Returns True if a request for this key was recently completed within recent_ttl."""
+        if key in self._recent_results:
+            _, ts = self._recent_results[key]
+            if time.time() - ts <= self._recent_ttl:
+                return True
+        return False
+
     def in_flight_count(self) -> int:
         """Returns current number of unique in-flight requests."""
         return len(self._calls)
@@ -97,6 +119,7 @@ class RequestCoalescer:
     def clear(self) -> None:
         """Clears all in-flight tracking (useful for test teardown)."""
         self._calls.clear()
+        self._recent_results.clear()
 
 
 _coalescer_instance: Optional[RequestCoalescer] = None

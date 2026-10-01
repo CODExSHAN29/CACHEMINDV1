@@ -33,44 +33,37 @@ from backend.semantic.embedding import MockEmbeddingEngine
 from backend.semantic.factory import SemanticCacheFactory
 from backend.semantic.vector_index import VectorIndex
 
-# Use in-memory SQLite with StaticPool for lightning fast, isolated, persistent test execution
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-
-test_engine = create_async_engine(
-    TEST_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-    future=True,
-)
-set_engine(test_engine)
-
-TestingAsyncSessionLocal = async_sessionmaker(
-    bind=test_engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autocommit=False,
-    autoflush=False,
-)
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+async def db_engine() -> AsyncGenerator:
+    engine = create_async_engine(
+        TEST_DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
+    )
+    set_engine(engine)
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-    async with TestingAsyncSessionLocal() as session:
-        yield session
-
-    async with test_engine.begin() as conn:
+    yield engine
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def db_session(db_engine) -> AsyncGenerator[AsyncSession, None]:
+    async_session = async_sessionmaker(
+        bind=db_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+    async with async_session() as session:
+        yield session
 
 
 @pytest.fixture(autouse=True)
@@ -79,7 +72,6 @@ def setup_test_singletons():
     mem_cache = InMemoryExactCache()
     mock_prov = MockProvider()
     set_cache_backend(mem_cache)
-    # Reset provider and routing engine singletons
     reg = ProviderRegistry()
     reg.register("mock", mock_prov)
     reg.register("openai", mock_prov)
@@ -90,7 +82,6 @@ def setup_test_singletons():
     from backend.routing.engine import RoutingEngine, set_routing_engine
     set_routing_engine(RoutingEngine(provider_registry=reg))
 
-    # Phase 2 singletons reset & mock
     mock_embed = MockEmbeddingEngine()
     vec_index = VectorIndex()
     vec_index._clear_sync()
@@ -104,12 +95,10 @@ def setup_test_singletons():
     set_guardrail_arbiter(arbiter)
     set_volatility_engine(volatility)
 
-    # Phase 4 singletons reset
     limiter = RateLimiter()
     set_rate_limiter(limiter)
     get_circuit_breaker_registry().reset_all()
 
-    # Request coalescer reset
     from backend.caching.coalescer import RequestCoalescer, set_request_coalescer
     set_request_coalescer(RequestCoalescer())
 
@@ -117,17 +106,22 @@ def setup_test_singletons():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+async def async_client(db_engine) -> AsyncGenerator[AsyncClient, None]:
+    async_session = async_sessionmaker(
+        bind=db_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-        async with TestingAsyncSessionLocal() as session:
+        async with async_session() as session:
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
-
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
-
     app.dependency_overrides.clear()
 
 

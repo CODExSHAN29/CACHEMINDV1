@@ -125,6 +125,8 @@ async def create_chat_completion(
     )
 
     cache_backend = get_cache_backend()
+    coalescer = get_request_coalescer()
+    coalesce_key = f"{identity.tenant_id}:{identity.project_id}:{exact_request_hash}"
 
     # 4. L1 EXACT CACHE LOOKUP
     cache_start_ns = time.perf_counter_ns()
@@ -133,6 +135,7 @@ async def create_chat_completion(
 
     if cached is not None:
         # EXACT HIT
+        was_coalesced = coalescer.is_recent(coalesce_key)
         cache_status = "EXACT_HIT"
         upstream_called = False
         upstream_latency_ms = None
@@ -191,6 +194,7 @@ async def create_chat_completion(
             "X-CacheMind-Provider": cached.provider or norm_req.provider,
             "X-CacheMind-Model": response_body.get("model", norm_req.model),
             "X-CacheMind-Fallback-Hops": "0",
+            "X-CacheMind-Coalesced": "true" if was_coalesced else "false",
             **rl_headers,
         }
 
@@ -218,9 +222,11 @@ async def create_chat_completion(
     )
 
     last_user_text = OpenAIAdapter.extract_last_user_message(messages_dicts) or ""
+    coalescer = get_request_coalescer()
+    coalesce_key = f"{identity.tenant_id}:{identity.project_id}:{exact_request_hash}"
 
     query_vector: Optional[list] = None
-    if last_user_text:
+    if last_user_text and not coalescer.is_in_flight(coalesce_key):
         try:
             query_vector = await semantic_service.embedding_engine.embed(last_user_text)
             candidates = await semantic_service.vector_index.search(
