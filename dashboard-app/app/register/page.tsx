@@ -4,45 +4,16 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import {
-  Sparkles,
-  Cpu,
-  UserPlus,
-  ArrowRight,
-  ShieldCheck,
-  CheckCircle2,
-  Mail,
-  Lock,
-  Building,
-  User as UserIcon,
-} from "lucide-react";
-
-function GithubIcon({ className = "w-4 h-4" }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
-      />
-    </svg>
-  );
-}
+import { Cpu, UserPlus, ArrowRight, Mail, Lock, Building, User as UserIcon } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { signup, loginWithGithub } = useAuth();
+  const { signup } = useAuth();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [org, setOrg] = useState("");
   const [password, setPassword] = useState("");
-  const [tier, setTier] = useState<"developer" | "growth" | "enterprise">("growth");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -57,22 +28,15 @@ export default function RegisterPage() {
     setErrorMsg("");
 
     try {
-      await signup(name.trim(), email.trim(), password.trim(), org.trim() || `${name}'s Org`, tier);
-      router.push("/dashboard");
+      const ok = await signup(name.trim(), email.trim(), password.trim(), org.trim() || `${name}'s Org`);
+      if (ok) {
+        router.push("/dashboard");
+      } else {
+        setErrorMsg("Registration failed. Please check your credentials.");
+      }
     } catch (err: any) {
       setErrorMsg(err?.message || "Registration failed.");
-      setIsLoading(false);
-    }
-  };
-
-  const handleGithubSignUp = async () => {
-    setIsLoading(true);
-    setErrorMsg("");
-    try {
-      await loginWithGithub();
-      router.push("/dashboard");
-    } catch (err: any) {
-      setErrorMsg(err?.message || "GitHub authentication failed.");
+    } finally {
       setIsLoading(false);
     }
   };
@@ -103,7 +67,7 @@ export default function RegisterPage() {
             </Link>
 
             <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5">
-              INSTANT KEY ALLOCATION
+              INSTANT ALLOCATION
             </span>
           </div>
 
@@ -111,7 +75,7 @@ export default function RegisterPage() {
             Provision Organization Tenant
           </h1>
           <p className="text-xs font-mono text-slate-400 mt-1">
-            Get instant developer access to CacheMind with 500,000 free queries / month.
+            Get developer access to CacheMind with real multi-tenant workspaces.
           </p>
         </div>
 
@@ -120,30 +84,6 @@ export default function RegisterPage() {
             {errorMsg}
           </div>
         )}
-
-        {/* GitHub 1-Click Fast Track */}
-        <button
-          type="button"
-          onClick={handleGithubSignUp}
-          disabled={isLoading}
-          className="w-full flex items-center justify-center gap-2.5 py-3 px-4 bg-slate-900 hover:bg-slate-800/90 border border-slate-700 text-slate-100 hover:border-slate-500 font-mono text-xs font-semibold transition-all shadow-sm mb-5 group"
-        >
-          {isLoading ? (
-            <div className="w-4 h-4 border-2 border-slate-400 border-t-white rounded-full animate-spin" />
-          ) : (
-            <GithubIcon className="w-4 h-4 text-slate-200 group-hover:scale-105 transition-transform" />
-          )}
-          <span>SIGN UP WITH GITHUB SSO</span>
-        </button>
-
-        {/* Divider */}
-        <div className="relative flex py-2 items-center mb-5">
-          <div className="flex-grow border-t border-slate-800"></div>
-          <span className="flex-shrink mx-4 text-[10px] font-mono text-slate-500 uppercase tracking-wider">
-            OR CREATE CUSTOM WORKSPACE
-          </span>
-          <div className="flex-grow border-t border-slate-800"></div>
-        </div>
 
         <form className="space-y-4" onSubmit={handleRegister}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -221,20 +161,6 @@ export default function RegisterPage() {
               className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-600"
               required
             />
-          </div>
-
-          <div className="p-3 bg-slate-900/60 border border-slate-800/80 space-y-1">
-            <div className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider">
-              Selected Plan Tier:
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-mono text-indigo-300 font-bold">
-                Developer Free Tier (500k queries/mo)
-              </span>
-              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950 border border-emerald-800 px-2 py-0.5">
-                $0.00 / mo
-              </span>
-            </div>
           </div>
 
           <button

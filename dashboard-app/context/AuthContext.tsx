@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
@@ -11,305 +11,183 @@ export interface User {
   organization: string;
   role: "admin" | "developer" | "viewer";
   avatarUrl?: string;
-  provider?: "email" | "github" | "demo";
+  provider?: "email" | "github";
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  role: string;
+}
+
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  tenant_id: string;
 }
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  tenantId: string;
-  projectId: string;
-  apiKey: string;
-  adminKey: string;
-  planTier: "developer" | "growth" | "enterprise";
   isLoading: boolean;
-  login: (email: string, pass: string, tenant?: string) => Promise<boolean>;
+  workspaces: Workspace[];
+  activeWorkspace: Workspace | null;
+  projects: ProjectInfo[];
+  activeProject: ProjectInfo | null;
+  login: (email: string, pass: string) => Promise<boolean>;
   loginWithEmail: (email: string, pass: string) => Promise<boolean>;
-  loginWithGithub: (githubHandle?: string) => Promise<boolean>;
-  signup: (
-    name: string,
-    email: string,
-    pass: string,
-    org: string,
-    tier?: "developer" | "growth" | "enterprise"
-  ) => Promise<boolean>;
-  loginDemo: () => void;
-  logout: () => void;
-  switchTenant: (tenantId: string) => void;
+  signup: (name: string, email: string, pass: string, org: string, tier?: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  switchWorkspace: (workspaceId: string) => Promise<void>;
   switchProject: (projectId: string) => void;
-  updateKeys: (apiKey: string, adminKey: string) => void;
 }
-
-const DEFAULT_DEV_KEY = "cm_live_development_test_key_000000000000000000000000";
-const DEFAULT_ADMIN_KEY = "cm_admin_master_secret_key_9999999999999999";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [tenantId, setTenantId] = useState<string>("tenant_default");
-  const [projectId, setProjectId] = useState<string>("proj_default");
-  const [apiKey, setApiKey] = useState<string>(DEFAULT_DEV_KEY);
-  const [adminKey, setAdminKey] = useState<string>(DEFAULT_ADMIN_KEY);
-  const [planTier, setPlanTier] = useState<"developer" | "growth" | "enterprise">("growth");
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspace, setActiveWorkspace] = useState<Workspace | null>(null);
+  const [projects, setProjects] = useState<ProjectInfo[]>([]);
+  const [activeProject, setActiveProject] = useState<ProjectInfo | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function initAuth() {
-      try {
-        // Attempt to fetch current session context from backend (/v1/auth/me)
-        const meData = await api.getMe().catch(() => null);
-
-        if (meData && meData.user && isMounted) {
-          const authUser: User = {
-            id: meData.user.id,
-            name: meData.user.full_name || meData.user.email.split("@")[0],
-            email: meData.user.email,
-            organization: meData.active_tenant?.name || "My Workspace",
-            role: (meData.active_tenant?.role as any) || "admin",
-            provider: "email",
-          };
-
-          setUser(authUser);
-          if (meData.active_tenant?.id) {
-            setTenantId(meData.active_tenant.id);
-            localStorage.setItem("cachemind_tenant_id", meData.active_tenant.id);
-          }
-          if (meData.active_project?.id) {
-            setProjectId(meData.active_project.id);
-            localStorage.setItem("cachemind_project_id", meData.active_project.id);
-          }
-          if (meData.raw_api_key) {
-            setApiKey(meData.raw_api_key);
-            localStorage.setItem("cachemind_api_key", meData.raw_api_key);
-          }
-          if (meData.session_token) {
-            localStorage.setItem("cachemind_session_token", meData.session_token);
-          }
-          localStorage.setItem("cachemind_user", JSON.stringify(authUser));
-          return;
-        }
-
-        // Fallback to local storage if offline or during local development
-        const storedUser = localStorage.getItem("cachemind_user");
-        const storedTenant = localStorage.getItem("cachemind_tenant_id");
-        const storedProject = localStorage.getItem("cachemind_project_id");
-        const storedApiKey = localStorage.getItem("cachemind_api_key");
-        const storedAdminKey = localStorage.getItem("cachemind_admin_key");
-        const storedTier = localStorage.getItem("cachemind_tier") as any;
-
-        if (storedUser && isMounted) setUser(JSON.parse(storedUser));
-        if (storedTenant && isMounted) setTenantId(storedTenant);
-        if (storedProject && isMounted) setProjectId(storedProject);
-        if (storedApiKey && isMounted) setApiKey(storedApiKey);
-        if (storedAdminKey && isMounted) setAdminKey(storedAdminKey);
-        if (storedTier && isMounted) setPlanTier(storedTier);
-      } catch (e) {
-        console.warn("Auth initialization notice:", e);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }
-
-    initAuth();
-
-    return () => {
-      isMounted = false;
-    };
+  const refreshWorkspaces = useCallback(async () => {
+    try {
+      const list = await api.listWorkspaces();
+      const mapped: Workspace[] = (Array.isArray(list) ? list : []).map((w: any) => ({
+        id: w.id || w.tenant_id,
+        name: w.name || w.tenant_name || "Workspace",
+        role: w.role || "developer",
+      }));
+      setWorkspaces(mapped);
+      return mapped;
+    } catch { return []; }
   }, []);
 
+  const loadSession = useCallback(async () => {
+    try {
+      const me = await api.getMe();
+      if (me && me.user) {
+        const authUser: User = {
+          id: me.user.id,
+          name: me.user.full_name || me.user.email.split("@")[0],
+          email: me.user.email,
+          organization: me.active_tenant?.name || "My Workspace",
+          role: (me.active_tenant?.role as any) || "admin",
+          provider: "email",
+        };
+        setUser(authUser);
+        const wsList = await refreshWorkspaces();
+        const currentWs = wsList.find((w) => w.id === (me.active_tenant?.id || me.active_workspace?.id));
+        if (currentWs) setActiveWorkspace(currentWs);
+        else if (wsList.length) { setActiveWorkspace(wsList[0]); }
+      } else {
+        setUser(null);
+        setWorkspaces([]);
+        setActiveWorkspace(null);
+      }
+    } catch {
+      setUser(null);
+      setWorkspaces([]);
+      setActiveWorkspace(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [refreshWorkspaces]);
+
+  useEffect(() => {
+    loadSession();
+    const interval = setInterval(() => loadSession(), 30000);
+    return () => clearInterval(interval);
+  }, [loadSession]);
+
+  useEffect(() => {
+    if (!activeWorkspace || !user) { setProjects([]); setActiveProject(null); return; }
+    api.listProjects(activeWorkspace.id).then((list) => {
+      const mapped = (Array.isArray(list) ? list : []).map((p: any) => ({
+        id: p.id || p.project_id,
+        name: p.name || "Project",
+        tenant_id: p.tenant_id || activeWorkspace.id,
+      }));
+      setProjects(mapped);
+      if (mapped.length && !activeProject) setActiveProject(mapped[0]);
+    }).catch(() => { setProjects([]); setActiveProject(null); });
+  }, [activeWorkspace, user, activeProject]);
+
   const loginWithEmail = async (email: string, pass: string): Promise<boolean> => {
-    try {
-      const res = await api.login({ email, password: pass });
-      if (res && res.user) {
-        const loggedUser: User = {
-          id: res.user.id,
-          name: res.user.full_name || email.split("@")[0],
-          email: res.user.email,
-          organization: res.active_tenant?.name || "My Workspace",
-          role: (res.active_tenant?.role as any) || "admin",
-          provider: "email",
-        };
-
-        setUser(loggedUser);
-        const tId = res.active_tenant?.id || "tenant_default";
-        const pId = res.active_project?.id || "proj_default";
-        setTenantId(tId);
-        setProjectId(pId);
-
-        if (res.session_token) {
-          localStorage.setItem("cachemind_session_token", res.session_token);
-        }
-        if (res.raw_api_key) {
-          setApiKey(res.raw_api_key);
-          localStorage.setItem("cachemind_api_key", res.raw_api_key);
-        }
-
-        localStorage.setItem("cachemind_user", JSON.stringify(loggedUser));
-        localStorage.setItem("cachemind_tenant_id", tId);
-        localStorage.setItem("cachemind_project_id", pId);
-        return true;
-      }
-    } catch (err: any) {
-      throw err;
+    const res = await api.login({ email, password: pass });
+    if (res && res.user) {
+      const loggedUser: User = {
+        id: res.user.id,
+        name: res.user.full_name || email.split("@")[0],
+        email: res.user.email,
+        organization: res.active_tenant?.name || "My Workspace",
+        role: (res.active_tenant?.role as any) || "admin",
+        provider: "email",
+      };
+      setUser(loggedUser);
+      const wsList = await refreshWorkspaces();
+      const currentWs = wsList.find((w) => w.id === (res.active_tenant?.id || res.active_workspace?.id)) || wsList[0] || null;
+      setActiveWorkspace(currentWs);
+      return true;
     }
     return false;
   };
 
-  const login = async (email: string, pass: string, tenant = "tenant_default"): Promise<boolean> => {
-    return loginWithEmail(email, pass);
-  };
+  const login = async (email: string, pass: string): Promise<boolean> => loginWithEmail(email, pass);
 
-  const loginWithGithub = async (githubHandle = "octocat-engineer"): Promise<boolean> => {
-    const cleanHandle = githubHandle.trim() || "github-developer";
-    const email = `${cleanHandle.toLowerCase()}@users.noreply.github.com`;
-    const password = `GitHubOAuthToken_${cleanHandle}_2026!`;
-    const orgName = `${cleanHandle}'s Workspace`;
-
-    try {
-      // Try login first
-      return await loginWithEmail(email, password);
-    } catch {
-      // If user doesn't exist yet, automatically provision via signup
-      try {
-        return await signup(cleanHandle, email, password, orgName, "growth");
-      } catch (signupErr: any) {
-        // Fallback for offline dev
-        const newUser: User = {
-          id: "usr_gh_" + Math.random().toString(36).substring(2, 9),
-          name: cleanHandle,
-          email,
-          organization: orgName,
-          role: "admin",
-          avatarUrl: `https://github.com/${cleanHandle}.png`,
-          provider: "github",
-        };
-        const tenantSlug = `tenant_${cleanHandle.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
-        setUser(newUser);
-        setTenantId(tenantSlug);
-        localStorage.setItem("cachemind_user", JSON.stringify(newUser));
-        localStorage.setItem("cachemind_tenant_id", tenantSlug);
-        return true;
-      }
-    }
-  };
-
-  const signup = async (
-    name: string,
-    email: string,
-    pass: string,
-    org: string,
-    tier: "developer" | "growth" | "enterprise" = "growth"
-  ): Promise<boolean> => {
-    try {
-      const res = await api.signup({
-        email,
-        password: pass,
-        full_name: name,
-        workspace_name: org,
-      });
-
-      if (res && res.user) {
-        const newUser: User = {
-          id: res.user.id,
-          name: res.user.full_name || name,
-          email: res.user.email,
-          organization: res.active_tenant?.name || org,
-          role: "admin",
-          provider: "email",
-        };
-
-        setUser(newUser);
-        const tId = res.active_tenant?.id || "tenant_default";
-        const pId = res.active_project?.id || "proj_default";
-        setTenantId(tId);
-        setProjectId(pId);
-        setPlanTier(tier);
-
-        if (res.session_token) {
-          localStorage.setItem("cachemind_session_token", res.session_token);
-        }
-        if (res.raw_api_key) {
-          setApiKey(res.raw_api_key);
-          localStorage.setItem("cachemind_api_key", res.raw_api_key);
-        }
-
-        localStorage.setItem("cachemind_user", JSON.stringify(newUser));
-        localStorage.setItem("cachemind_tenant_id", tId);
-        localStorage.setItem("cachemind_project_id", pId);
-        localStorage.setItem("cachemind_tier", tier);
-        return true;
-      }
-    } catch (err: any) {
-      throw err;
+  const signup = async (name: string, email: string, pass: string, org: string, tier = "growth"): Promise<boolean> => {
+    const res = await api.signup({ email, password: pass, full_name: name, workspace_name: org });
+    if (res && res.user) {
+      const newUser: User = {
+        id: res.user.id,
+        name: res.user.full_name || name,
+        email: res.user.email,
+        organization: res.active_tenant?.name || org,
+        role: "admin",
+        provider: "email",
+      };
+      setUser(newUser);
+      const wsList = await refreshWorkspaces();
+      const currentWs = wsList.find((w) => w.id === (res.active_tenant?.id)) || wsList[0] || null;
+      setActiveWorkspace(currentWs);
+      return true;
     }
     return false;
-  };
-
-  const loginDemo = async () => {
-    const demoEmail = "demo@cachemind.ai";
-    const demoPass = "CacheMindDemo2026!";
-    try {
-      await loginWithEmail(demoEmail, demoPass);
-    } catch {
-      try {
-        await signup("Demo Developer", demoEmail, demoPass, "CacheMind Sandbox", "growth");
-      } catch {
-        const demoUser: User = {
-          id: "usr_developer_demo",
-          name: "Demo Developer",
-          email: demoEmail,
-          organization: "CacheMind Sandbox",
-          role: "admin",
-          provider: "demo",
-        };
-        setUser(demoUser);
-        setTenantId("tenant_default");
-        setProjectId("proj_default");
-        setApiKey(DEFAULT_DEV_KEY);
-        setAdminKey(DEFAULT_ADMIN_KEY);
-        setPlanTier("growth");
-        localStorage.setItem("cachemind_user", JSON.stringify(demoUser));
-        localStorage.setItem("cachemind_tenant_id", "tenant_default");
-        localStorage.setItem("cachemind_project_id", "proj_default");
-      }
-    }
-    router.push("/dashboard");
   };
 
   const logout = async () => {
-    try {
-      await api.logout();
-    } catch {}
+    try { await api.logout(); } catch {}
     setUser(null);
-    localStorage.removeItem("cachemind_user");
-    localStorage.removeItem("cachemind_session_token");
+    setWorkspaces([]);
+    setActiveWorkspace(null);
+    setProjects([]);
+    setActiveProject(null);
     router.push("/login");
   };
 
-  const switchTenant = async (newTenant: string) => {
+  const switchWorkspace = async (workspaceId: string) => {
+    try { await api.selectWorkspace(workspaceId); } catch {}
+    const ws = workspaces.find((w) => w.id === workspaceId);
+    if (ws) setActiveWorkspace(ws);
+    setActiveProject(null);
     try {
-      await api.selectWorkspace(newTenant);
-    } catch (e) {
-      console.warn("Workspace select fallback:", e);
-    }
-    setTenantId(newTenant);
-    localStorage.setItem("cachemind_tenant_id", newTenant);
+      const list = await api.listProjects(workspaceId);
+      const mapped = (Array.isArray(list) ? list : []).map((p: any) => ({
+        id: p.id || p.project_id,
+        name: p.name || "Project",
+        tenant_id: p.tenant_id || workspaceId,
+      }));
+      setProjects(mapped);
+      if (mapped.length) setActiveProject(mapped[0]);
+    } catch {}
   };
 
-  const switchProject = (newProject: string) => {
-    setProjectId(newProject);
-    localStorage.setItem("cachemind_project_id", newProject);
-  };
-
-  const updateKeys = (newApi: string, newAdmin: string) => {
-    setApiKey(newApi);
-    setAdminKey(newAdmin);
-    localStorage.setItem("cachemind_api_key", newApi);
-    localStorage.setItem("cachemind_admin_key", newAdmin);
+  const switchProject = (projectId: string) => {
+    const proj = projects.find((p) => p.id === projectId);
+    if (proj) setActiveProject(proj);
   };
 
   return (
@@ -317,21 +195,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         isAuthenticated: !!user,
-        tenantId,
-        projectId,
-        apiKey,
-        adminKey,
-        planTier,
         isLoading,
+        workspaces,
+        activeWorkspace,
+        projects,
+        activeProject,
         login,
         loginWithEmail,
-        loginWithGithub,
         signup,
-        loginDemo,
         logout,
-        switchTenant,
+        switchWorkspace,
         switchProject,
-        updateKeys,
       }}
     >
       {children}
@@ -341,8 +215,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within AuthProvider");
   return context;
 }

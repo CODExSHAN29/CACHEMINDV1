@@ -1,351 +1,227 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
+import React, { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import { APIKeyInfo, ProjectInfo, TenantInfo } from "@/lib/types";
-import {
-  KeyRound,
-  Building,
-  FolderGit2,
-  Plus,
-  Trash2,
-  Copy,
-  ShieldCheck,
-  Check,
-  AlertTriangle,
-} from "lucide-react";
+import { APIKeyInfo } from "@/lib/types";
+import { KeyRound, Copy, Check, Trash2, Plus, ShieldCheck, AlertTriangle, FolderGit2 } from "lucide-react";
 
-export default function KeysAndProjectsPage() {
-  const [tenants, setTenants] = useState<TenantInfo[]>([]);
-  const [projects, setProjects] = useState<ProjectInfo[]>([]);
+export default function KeysPage() {
+  const { activeWorkspace, projects, activeProject, switchProject } = useAuth();
+  const [name, setName] = useState("");
+  const [rawKey, setRawKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState("");
   const [keys, setKeys] = useState<APIKeyInfo[]>([]);
-  const [selectedTenant, setSelectedTenant] = useState("tenant_default");
-  const [selectedProject, setSelectedProject] = useState("proj_default");
+  const [loadingKeys, setLoadingKeys] = useState(false);
 
-  const [newKeyName, setNewKeyName] = useState("");
-  const [newKeyRole, setNewKeyRole] = useState("inference");
-  const [createdRawKey, setCreatedRawKey] = useState<string | null>(null);
-
-  const [newTenantName, setNewTenantName] = useState("");
-  const [newProjectName, setNewProjectName] = useState("");
-
-  const refreshData = async () => {
-    try {
-      const tList = await api.listTenants();
-      setTenants(tList);
-      const pList = await api.listProjects(selectedTenant);
-      setProjects(pList);
-      const kList = await api.listAPIKeys(selectedProject);
-      setKeys(kList);
-    } catch (e: any) {
-      console.error(e);
+  const fetchKeys = useCallback(async () => {
+    if (!activeProject?.id && !projects.length) {
+      setKeys([]);
+      return;
     }
-  };
+    const targetProjId = activeProject?.id || projects[0]?.id;
+    if (!targetProjId) return;
+
+    setLoadingKeys(true);
+    try {
+      const list = await api.listAPIKeys(targetProjId);
+      setKeys(list);
+    } catch (e: any) {
+      console.error("Failed to list API keys:", e);
+    } finally {
+      setLoadingKeys(false);
+    }
+  }, [activeProject, projects]);
 
   useEffect(() => {
-    refreshData();
-  }, [selectedTenant, selectedProject]);
+    fetchKeys();
+  }, [fetchKeys]);
 
-  const handleCreateKey = async () => {
-    if (!newKeyName.trim()) {
-      toast.error("Please specify an API key identifier");
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetProjId = activeProject?.id || projects[0]?.id;
+    if (!targetProjId) {
+      setError("No active project found to associate with this key.");
       return;
     }
+    if (!name.trim()) {
+      setError("Key name required.");
+      return;
+    }
+
+    setIsCreating(true);
+    setError("");
+    setRawKey(null);
+
     try {
-      const res = await api.createAPIKey(selectedProject, newKeyName.trim(), newKeyRole);
-      toast.success("Cryptographic API Key generated successfully.");
-      if (res.raw_key) {
-        setCreatedRawKey(res.raw_key);
+      const result = await api.createAPIKey(targetProjId, name.trim(), "admin");
+      if (result && result.raw_key) {
+        setRawKey(result.raw_key);
+        setName("");
+        fetchKeys();
+      } else {
+        setError("Key creation failed. Retry.");
       }
-      setNewKeyName("");
-      refreshData();
-    } catch (e: any) {
-      toast.error(`Key creation failed: ${e.message}`);
+    } catch (err: any) {
+      setError(err?.message || "Failed to create API key.");
+    } finally {
+      setIsCreating(false);
     }
   };
 
-  const handleRevokeKey = async (keyId: string) => {
-    if (!confirm("Confirm key revocation? Inactive tokens immediately return 401 Unauthorized.")) {
-      return;
-    }
+  const handleDelete = async (keyId: string) => {
     try {
       await api.revokeAPIKey(keyId);
-      toast.success("API key revoked from registry.");
-      refreshData();
+      fetchKeys();
     } catch (e: any) {
-      toast.error(`Revocation failed: ${e.message}`);
-    }
-  };
-
-  const handleCreateTenant = async () => {
-    if (!newTenantName.trim()) return;
-    try {
-      await api.createTenant(newTenantName.trim());
-      toast.success("Tenant partition provisioned.");
-      setNewTenantName("");
-      refreshData();
-    } catch (e: any) {
-      toast.error(`Tenant creation failed: ${e.message}`);
-    }
-  };
-
-  const handleCreateProject = async () => {
-    if (!newProjectName.trim()) return;
-    try {
-      await api.createProject(selectedTenant, newProjectName.trim());
-      toast.success("Project workspace provisioned.");
-      setNewProjectName("");
-      refreshData();
-    } catch (e: any) {
-      toast.error(`Project creation failed: ${e.message}`);
+      setError(e?.message || "Failed to revoke key.");
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Precision Dossier Header */}
-      <div className="bg-surface border border-outline p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="badge-pill bg-primary text-white border-primary">
-              SYS.ZONE // 04
-            </span>
-            <span className="text-on-surface-variant font-mono text-xs">
-              :: [IAM & MULTI-TENANT ISOLATION PLANE]
-            </span>
+    <div className="max-w-3xl space-y-8">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-950/60 border border-indigo-600/50 flex items-center justify-center text-indigo-400">
+            <KeyRound className="w-5 h-5" />
           </div>
-          <h1 className="text-2xl font-display font-bold text-on-surface uppercase tracking-tight mt-2">
-            API Keys & Multi-Tenant Access Control
-          </h1>
-          <p className="text-xs font-sans text-on-surface-variant mt-1 max-w-3xl">
-            Provision tenant partitions, isolate project namespaces, and issue SHA-256 hashed API keys with granular role permissions.
-          </p>
-        </div>
-      </div>
-
-      {/* Tenant / Project Provisioning Matrix */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Tenant Box */}
-        <div className="bg-surface border border-outline p-5 space-y-3 font-mono text-xs">
-          <div className="flex items-center justify-between pb-2 border-b border-outline-variant">
-            <div className="flex items-center gap-2">
-              <Building className="w-4 h-4 text-primary" />
-              <h2 className="text-xs font-bold text-on-surface uppercase tracking-wider">
-                TENANT PARTITIONS
-              </h2>
-            </div>
-            <span className="text-[10px] font-mono text-on-surface-variant bg-surface-dim px-2 py-0.5 border border-outline-variant">
-              COUNT: [{tenants.length}]
-            </span>
-          </div>
-
-          <select
-            value={selectedTenant}
-            onChange={(e) => setSelectedTenant(e.target.value)}
-            className="w-full bg-surface-dim border border-outline px-3 py-2 text-on-surface font-mono text-xs focus:outline-none focus:border-primary"
-          >
-            {tenants.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name} [{t.id}]
-              </option>
-            ))}
-          </select>
-
-          <div className="flex gap-2 pt-1">
-            <input
-              type="text"
-              placeholder="Tenant Label (e.g. Org Alpha)..."
-              value={newTenantName}
-              onChange={(e) => setNewTenantName(e.target.value)}
-              className="flex-1 bg-surface-dim border border-outline px-3 py-1.5 text-xs text-on-surface font-mono focus:outline-none focus:border-primary"
-            />
-            <button
-              onClick={handleCreateTenant}
-              className="px-3 py-1.5 bg-surface-dim hover:bg-blue-50 border border-outline hover:border-primary text-primary text-xs font-bold flex items-center gap-1.5 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>PROVISION</span>
-            </button>
+          <div>
+            <h1 className="font-display font-bold text-2xl tracking-tight">API KEY MANAGEMENT</h1>
+            <p className="text-xs font-mono text-slate-400">
+              TENANT: {activeWorkspace?.name || activeWorkspace?.id || "N/A"}
+            </p>
           </div>
         </div>
 
-        {/* Project Box */}
-        <div className="bg-surface border border-outline p-5 space-y-3 font-mono text-xs">
-          <div className="flex items-center justify-between pb-2 border-b border-outline-variant">
-            <div className="flex items-center gap-2">
-              <FolderGit2 className="w-4 h-4 text-secondary" />
-              <h2 className="text-xs font-bold text-on-surface uppercase tracking-wider">
-                PROJECT WORKSPACES
-              </h2>
-            </div>
-            <span className="text-[10px] font-mono text-on-surface-variant bg-surface-dim px-2 py-0.5 border border-outline-variant">
-              COUNT: [{projects.length}]
-            </span>
-          </div>
-
-          <select
-            value={selectedProject}
-            onChange={(e) => setSelectedProject(e.target.value)}
-            className="w-full bg-surface-dim border border-outline px-3 py-2 text-on-surface font-mono text-xs focus:outline-none focus:border-secondary"
-          >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} [{p.id}]
-              </option>
-            ))}
-          </select>
-
-          <div className="flex gap-2 pt-1">
-            <input
-              type="text"
-              placeholder="Project Label (e.g. LLM Inference Service)..."
-              value={newProjectName}
-              onChange={(e) => setNewProjectName(e.target.value)}
-              className="flex-1 bg-surface-dim border border-outline px-3 py-1.5 text-xs text-on-surface font-mono focus:outline-none focus:border-secondary"
-            />
-            <button
-              onClick={handleCreateProject}
-              className="px-3 py-1.5 bg-surface-dim hover:bg-blue-50 border border-outline hover:border-secondary text-secondary text-xs font-bold flex items-center gap-1.5 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>PROVISION</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Key Generation Form */}
-      <div className="bg-surface border border-outline p-5 space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-outline-variant">
-          <div className="flex items-center gap-2">
-            <KeyRound className="w-4 h-4 text-primary" />
-            <h2 className="text-xs font-mono font-bold text-on-surface uppercase tracking-wider">
-              ISSUE LIVE SCOPED API TOKEN
-            </h2>
-          </div>
-          <span className="text-[10px] font-mono text-on-surface-variant bg-surface-dim px-2 py-0.5 border border-outline-variant">
-            TARGET: [{selectedProject}]
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 font-mono text-xs">
-          <div className="space-y-1">
-            <label className="label-caps">KEY IDENTIFIER / NAME</label>
-            <input
-              type="text"
-              placeholder="e.g. PROD-API-GATEWAY-INFERENCE"
-              value={newKeyName}
-              onChange={(e) => setNewKeyName(e.target.value)}
-              className="w-full bg-surface-dim border border-outline px-3 py-2 text-on-surface text-xs font-mono focus:outline-none focus:border-primary"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="label-caps">ROLE / PERMISSION SCOPE</label>
+        {projects.length > 1 && (
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 text-xs font-mono">
+            <FolderGit2 className="w-3.5 h-3.5 text-indigo-400" />
             <select
-              value={newKeyRole}
-              onChange={(e) => setNewKeyRole(e.target.value)}
-              className="w-full bg-surface-dim border border-outline px-3 py-2 text-on-surface text-xs font-mono focus:outline-none focus:border-primary"
+              value={activeProject?.id || ""}
+              onChange={(e) => switchProject(e.target.value)}
+              aria-label="Select active project"
+              className="bg-transparent text-slate-200 focus:outline-none cursor-pointer"
             >
-              <option value="inference">inference (Chat, Streaming, Normalization)</option>
-              <option value="read_only">read_only (Metrics, Telemetry Audit)</option>
-              <option value="admin">admin (Full Cluster Control Plane)</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id} className="bg-slate-950 text-slate-200">
+                  {p.name}
+                </option>
+              ))}
             </select>
-          </div>
-
-          <div className="flex items-end">
-            <button
-              onClick={handleCreateKey}
-              className="btn-solid w-full py-2.5 bg-primary text-white border-primary hover:bg-blue-800 font-mono font-bold text-xs flex items-center justify-center gap-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>GENERATE SECRET KEY</span>
-            </button>
-          </div>
-        </div>
-
-        {createdRawKey && (
-          <div className="mt-3 p-4 bg-emerald-50 border border-emerald-300 space-y-2">
-            <div className="flex items-center gap-2 text-xs font-mono text-emerald-800 font-bold">
-              <AlertTriangle className="w-4 h-4 text-amber-600" />
-              <span>SECRET KEY GENERATED — STORE IMMEDIATELY:</span>
-            </div>
-            <div className="flex items-center justify-between font-mono text-xs text-on-surface bg-white p-2.5 border border-emerald-300">
-              <span className="text-emerald-700 font-bold select-all">{createdRawKey}</span>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(createdRawKey);
-                  toast.success("Secret API key copied to clipboard.");
-                }}
-                className="flex items-center gap-1 text-[11px] font-mono text-on-surface px-2.5 py-1 bg-surface-dim border border-outline hover:border-primary transition-colors font-bold"
-              >
-                <Copy className="w-3 h-3" />
-                <span>COPY</span>
-              </button>
-            </div>
           </div>
         )}
       </div>
 
-      {/* Active API Keys Table */}
-      <div className="bg-surface border border-outline p-5 space-y-3">
-        <div className="flex items-center justify-between pb-3 border-b border-outline-variant">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-primary" />
-            <h2 className="text-xs font-mono font-bold text-on-surface uppercase tracking-wider">
-              ACTIVE ACCESS TOKENS IN REGISTRY
-            </h2>
+      <div className="bg-slate-950/60 border border-slate-800 p-5 sm:p-6 space-y-4 shadow-[0_0_30px_rgba(99,102,241,0.06)]">
+        <form onSubmit={handleCreate} className="space-y-3">
+          <label htmlFor="key-name" className="text-[10px] font-mono font-bold text-slate-300 uppercase tracking-wider">
+            New Project Key Name (Project: {activeProject?.name || projects[0]?.name || "Default"})
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="key-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="production-key-01"
+              className="flex-1 px-3 py-2.5 bg-slate-900 border border-slate-800 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-600"
+            />
+            <button
+              type="submit"
+              disabled={isCreating || !name.trim() || (!activeProject?.id && !projects.length)}
+              className="btn-primary text-xs font-mono px-4 py-2.5 flex items-center gap-2 whitespace-nowrap shadow-xl shadow-indigo-900/30"
+            >
+              {isCreating ? (
+                <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+              <span>CREATE KEY</span>
+            </button>
           </div>
-          <span className="text-[10px] font-mono text-on-surface-variant bg-surface-dim px-2 py-0.5 border border-outline-variant">
-            TOTAL: [{keys.length}]
-          </span>
-        </div>
+          {error && <div className="p-2.5 bg-rose-950/60 border border-rose-900 text-rose-300 text-xs font-mono">{error}</div>}
+        </form>
 
-        <div className="overflow-x-auto border border-outline">
-          <table className="w-full text-left text-xs font-mono text-on-surface">
-            <thead className="bg-surface-dim text-[10px] text-on-surface-variant uppercase tracking-wider border-b border-outline">
-              <tr>
-                <th className="py-2.5 px-4 font-bold">IDENTIFIER</th>
-                <th className="py-2.5 px-4 font-bold">PREFIX</th>
-                <th className="py-2.5 px-4 font-bold">SCOPE</th>
-                <th className="py-2.5 px-4 font-bold">CREATED</th>
-                <th className="py-2.5 px-4 font-bold">STATUS</th>
-                <th className="py-2.5 px-4 text-right font-bold">ACTION</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-outline-variant">
+        {/* One-time raw key reveal modal */}
+        {rawKey && (
+          <div className="relative p-5 bg-indigo-950/30 border border-indigo-500/40 shadow-[0_0_40px_rgba(99,102,241,0.15)]">
+            <div className="absolute top-0 right-0 p-2">
+              <button onClick={() => setRawKey(null)} className="text-xs font-mono text-indigo-300 hover:text-white">
+                DISMISS
+              </button>
+            </div>
+            <div className="flex items-center gap-2 mb-2 text-indigo-300 font-bold text-xs font-mono">
+              <ShieldCheck className="w-4 h-4" /> ONE-TIME SECRET — COPY NOW
+            </div>
+            <div className="flex items-center gap-2 bg-[#07090e] border border-indigo-800/50 p-2 font-mono text-xs text-indigo-200 break-all">
+              <span>{rawKey}</span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(rawKey);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="shrink-0 p-1.5 bg-indigo-900 border border-indigo-500/50 text-indigo-200 hover:bg-indigo-800 transition-colors"
+                title="Copy to clipboard"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            <div className="mt-2 flex items-center gap-1.5 text-[10px] font-mono text-amber-400">
+              <AlertTriangle className="w-3 h-3" /> This raw key is shown exactly once and is not recoverable.
+            </div>
+          </div>
+        )}
+
+        <div className="border-t border-slate-800 pt-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">
+              Active Keys — {keys.length}
+            </h3>
+            {loadingKeys && (
+              <span className="text-[10px] font-mono text-slate-500 animate-pulse">Syncing...</span>
+            )}
+          </div>
+          {keys.length === 0 ? (
+            <div className="text-xs font-mono text-slate-500 py-2">
+              {loadingKeys ? "Loading keys..." : "No API keys provisioned for this project."}
+            </div>
+          ) : (
+            <div className="space-y-2">
               {keys.map((k) => (
-                <tr key={k.id} className="hover:bg-surface-dim transition-colors">
-                  <td className="py-3 px-4 font-bold text-on-surface">{k.name}</td>
-                  <td className="py-3 px-4 text-on-surface-variant">{k.key_prefix}...</td>
-                  <td className="py-3 px-4">
-                    <span className="px-2 py-0.5 bg-blue-50 text-primary border border-blue-200 text-[10px] font-bold uppercase">
-                      {k.role}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-on-surface-variant tabular-nums">
-                    {new Date(k.created_at).toISOString().substring(0, 10)}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-emerald-700 text-[11px] font-bold flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 bg-emerald-600"></span>
-                      ACTIVE
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <button
-                      onClick={() => handleRevokeKey(k.id)}
-                      className="text-[11px] font-mono text-red-600 hover:text-red-700 font-bold px-2.5 py-1 bg-red-50 border border-red-200 transition-colors"
-                    >
-                      REVOKE
-                    </button>
-                  </td>
-                </tr>
+                <div
+                  key={k.id}
+                  className="flex items-center justify-between px-3 py-2.5 bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition-colors"
+                >
+                  <div>
+                    <div className="text-xs font-mono font-bold text-slate-200 flex items-center gap-2">
+                      <span>{k.name}</span>
+                      <span className="text-[10px] px-1.5 py-0.2 bg-slate-800 text-indigo-300 font-normal">
+                        {k.key_prefix}…
+                      </span>
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-500">
+                      ID: {k.id} • Role: {k.role} • Created {new Date(k.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDelete(k.id)}
+                    className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 border border-transparent hover:border-rose-900/60 transition-all"
+                    title="Revoke Key"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
+      </div>
+
+      <div className="bg-slate-950/60 border border-slate-800 p-4 text-[10px] font-mono text-slate-400 leading-relaxed">
+        <strong className="text-slate-300">SECURITY POLICY — RAW KEY LIFECYCLE:</strong> Keys are returned once by the gateway and never persisted to browser storage (localStorage/sessionStorage) or disk. Copy to clipboard immediately. If lost, revoke and regenerate.
       </div>
     </div>
   );

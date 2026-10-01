@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import toast from "react-hot-toast";
+import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { BillingPlan, SubscriptionInfo } from "@/lib/types";
 import {
@@ -15,29 +16,39 @@ import {
 } from "lucide-react";
 
 export default function BillingPage() {
+  const { activeWorkspace } = useAuth();
   const [plans, setPlans] = useState<BillingPlan[]>([]);
   const [subscriptions, setSubscriptions] = useState<SubscriptionInfo[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     try {
       const pList = await api.listPlans();
       setPlans(pList);
-      const sList = await api.listSubscriptions();
-      setSubscriptions(sList);
+      if (activeWorkspace?.id) {
+        const sList = await api.listSubscriptions(activeWorkspace.id);
+        setSubscriptions(sList);
+      } else {
+        const sList = await api.listSubscriptions();
+        setSubscriptions(sList);
+      }
     } catch (e: any) {
       console.error(e);
     }
-  };
+  }, [activeWorkspace]);
 
   useEffect(() => {
     refreshData();
-  }, []);
+  }, [refreshData]);
 
   const handleSubscribe = async (tier: string) => {
+    if (!activeWorkspace?.id) {
+      toast.error("No active workspace selected.");
+      return;
+    }
     setLoading(true);
     try {
-      await api.subscribeTenant("tenant_default", tier);
+      await api.subscribeTenant(activeWorkspace.id, tier);
       toast.success(`Upgraded to ${tier.toUpperCase()} plan — Stripe metered billing initialized.`);
       refreshData();
     } catch (e: any) {
@@ -157,8 +168,8 @@ export default function BillingPage() {
               ACTIVE SUBSCRIPTION REGISTRY
             </h2>
           </div>
-          <span className="text-[10px] font-mono text-on-surface-variant bg-surface-dim px-2 py-0.5 border border-outline-variant">
-            PARTITION: [TENANT_DEFAULT]
+          <span className="text-[10px] font-mono text-on-surface-variant bg-surface-dim px-2 py-0.5 border border-outline-variant uppercase">
+            PARTITION: [{activeWorkspace?.name || activeWorkspace?.id || "AUTHENTICATING..."}]
           </span>
         </div>
 

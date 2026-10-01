@@ -11,31 +11,12 @@ import {
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const DEFAULT_DEV_KEY = "cm_live_development_test_key_000000000000000000000000";
-const DEFAULT_ADMIN_KEY = "cm_admin_master_secret_key_9999999999999999";
 
-function getApiKey(): string {
-  return (typeof window !== "undefined" && localStorage.getItem("cachemind_api_key")) || DEFAULT_DEV_KEY;
-}
-
-function getAdminKey(): string {
-  return (typeof window !== "undefined" && localStorage.getItem("cachemind_admin_key")) || DEFAULT_ADMIN_KEY;
-}
-
-function getSessionToken(): string | null {
-  return typeof window !== "undefined" ? localStorage.getItem("cachemind_session_token") : null;
-}
-
-async function req<T>(path: string, options?: RequestInit, admin = false): Promise<T> {
-  const sessionToken = getSessionToken();
-  const key = admin ? getAdminKey() : getApiKey();
-  const authHeader = key ? `Bearer ${key}` : (sessionToken ? `Bearer ${sessionToken}` : undefined);
-
+async function req<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     credentials: "include",
     headers: {
-      ...(authHeader ? { Authorization: authHeader } : {}),
       ...(options?.body ? { "Content-Type": "application/json" } : {}),
       ...options?.headers,
     },
@@ -85,7 +66,7 @@ export const api = {
   },
 
   async listWorkspaces(): Promise<TenantInfo[]> {
-    const data = await req<any>("/v1/auth/workspaces").catch(() => []);
+    const data = await req<any>("/v1/auth/workspaces");
     return Array.isArray(data) ? data : [];
   },
 
@@ -103,124 +84,57 @@ export const api = {
   },
 
   async listProjects(tenantId?: string): Promise<ProjectInfo[]> {
-    try {
-      const data = await req<any>("/v1/auth/projects");
-      if (Array.isArray(data)) return data;
-      if (data.projects) return data.projects;
-    } catch {
-      // Fallback to admin projects endpoint if authorized
-      try {
-        const query = tenantId ? `?tenant_id=${tenantId}` : "";
-        const adminData = await req<any>(`/v1/admin/projects${query}`, undefined, true);
-        return Array.isArray(adminData) ? adminData : (adminData.projects || []);
-      } catch {
-        return [];
-      }
-    }
+    const query = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : "";
+    const data = await req<any>(`/v1/auth/projects${query}`);
+    if (Array.isArray(data)) return data;
+    if (data.projects) return data.projects;
     return [];
   },
 
   async createProject(tenantId: string, name: string): Promise<any> {
-    try {
-      return await req<any>("/v1/auth/projects", {
-        method: "POST",
-        body: JSON.stringify({ name, tenant_id: tenantId }),
-      });
-    } catch {
-      return req<ProjectInfo>("/v1/admin/projects", {
-        method: "POST",
-        body: JSON.stringify({ tenant_id: tenantId, name }),
-      }, true);
-    }
+    return req<any>("/v1/auth/projects", {
+      method: "POST",
+      body: JSON.stringify({ name, tenant_id: tenantId }),
+    });
   },
 
   async listAPIKeys(projectId?: string): Promise<APIKeyInfo[]> {
-    try {
-      const query = projectId ? `?project_id=${projectId}` : "";
-      const data = await req<any>(`/v1/auth/keys${query}`);
-      if (Array.isArray(data)) return data;
-      if (data.api_keys) return data.api_keys;
-    } catch {
-      try {
-        const query = projectId ? `?project_id=${projectId}` : "";
-        const adminData = await req<any>(`/v1/admin/keys${query}`, undefined, true);
-        return Array.isArray(adminData) ? adminData : (adminData.api_keys || []);
-      } catch {
-        return [];
-      }
-    }
+    const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+    const data = await req<any>(`/v1/auth/keys${query}`);
+    if (Array.isArray(data)) return data;
+    if (data.api_keys) return data.api_keys;
     return [];
   },
 
   async createAPIKey(projectId: string, name: string, role = "inference"): Promise<any> {
-    try {
-      return await req<any>("/v1/auth/keys", {
-        method: "POST",
-        body: JSON.stringify({ project_id: projectId, name, role }),
-      });
-    } catch {
-      return req<APIKeyInfo>("/v1/admin/keys", {
-        method: "POST",
-        body: JSON.stringify({ project_id: projectId, name, role }),
-      }, true);
-    }
+    return req<any>("/v1/auth/keys", {
+      method: "POST",
+      body: JSON.stringify({ project_id: projectId, name, role }),
+    });
   },
 
   async revokeAPIKey(keyId: string): Promise<void> {
-    try {
-      await req<void>(`/v1/auth/keys/${keyId}`, { method: "DELETE" });
-    } catch {
-      await req<void>(`/v1/admin/keys/${keyId}`, { method: "DELETE" }, true);
-    }
+    await req<void>(`/v1/auth/keys/${keyId}`, { method: "DELETE" });
   },
 
   // 2. Dashboard & Analytics
-  async getDashboardSummary(tenantId = "tenant_default"): Promise<DashboardSummary> {
-    return req<DashboardSummary>(`/v1/dashboard/summary?tenant_id=${tenantId}`).catch(() => ({
-      total_requests: 0,
-      exact_hits: 0,
-      semantic_hits: 0,
-      cache_misses: 0,
-      cache_hit_ratio: 0,
-      tokens_saved: 0,
-      cost_saved_usd: 0,
-      average_latency_ms: 0,
-      cached_average_latency_ms: 0,
-      uncached_average_latency_ms: 0,
-      latency_reduction_percent: 0,
-    }));
+  async getDashboardSummary(tenantId?: string): Promise<DashboardSummary> {
+    const query = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : "";
+    return req<DashboardSummary>(`/v1/dashboard/summary${query}`);
   },
 
-  async getTimeseriesAnalytics(days = 7): Promise<any> {
-    return req<any>(`/v1/analytics/timeseries?days=${days}`).catch(() => ({ data: [] }));
+  async getTimeseriesAnalytics(days = 7, tenantId?: string): Promise<any> {
+    const params = new URLSearchParams({ days: String(days) });
+    if (tenantId) params.set("tenant_id", tenantId);
+    return req<any>(`/v1/analytics/timeseries?${params.toString()}`);
   },
 
-  // 3. Multi-Tenant Admin & Fallbacks
-  async listTenants(): Promise<TenantInfo[]> {
-    try {
-      return await this.listWorkspaces();
-    } catch {
-      const data = await req<any>("/v1/admin/tenants", undefined, true).catch(() => []);
-      return Array.isArray(data) ? data : (data.tenants || []);
-    }
-  },
-
-  async createTenant(name: string, tenantId?: string): Promise<TenantInfo> {
-    try {
-      return await this.createWorkspace(name);
-    } catch {
-      return req<TenantInfo>("/v1/admin/tenants", {
-        method: "POST",
-        body: JSON.stringify({ name, tenant_id: tenantId }),
-      }, true);
-    }
-  },
-
-  // 4. Cache Management & Invalidation
+  // 3. Cache Management & Invalidation
   async purgeCache(params: {
-    tenant_id: string;
+    tenant_id?: string;
     project_id?: string;
     model?: string;
+    namespace?: string;
     tags?: string[];
   }): Promise<PurgeResult> {
     return req<PurgeResult>("/v1/cache/purge", {
@@ -229,35 +143,45 @@ export const api = {
     });
   },
 
-  async inspectCacheKey(keyHash: string): Promise<CacheInspection> {
-    return req<CacheInspection>(`/v1/cache/inspect/${keyHash}`);
+  async inspectCacheKey(keyHash: string): Promise<any> {
+    return req<any>(`/v1/cache/inspect/${keyHash}`);
   },
 
   async deleteCacheKey(keyHash: string): Promise<void> {
     await req<void>(`/v1/cache/keys/${keyHash}`, { method: "DELETE" });
   },
 
-  async warmCache(items: Array<{ prompt: string; completion: string; model: string }>): Promise<{ seeded: number }> {
-    return req<{ seeded: number }>("/v1/cache/warm", {
+  async warmCache(
+    params:
+      | {
+          tenant_id?: string;
+          project_id?: string;
+          items: Array<{ prompt: string; completion: string; model: string }>;
+        }
+      | Array<{ prompt: string; completion: string; model: string }>,
+    tenantId?: string,
+    projectId?: string
+  ): Promise<{ seeded: number; seeded_l1?: number; seeded_l2?: number }> {
+    const payload = Array.isArray(params)
+      ? { items: params, tenant_id: tenantId, project_id: projectId }
+      : params;
+    return req<any>("/v1/cache/warm", {
       method: "POST",
-      body: JSON.stringify({
-        tenant_id: "tenant_default",
-        project_id: "proj_default",
-        items,
-      }),
+      body: JSON.stringify(payload),
     });
   },
 
-  // 5. Billing & Subscriptions
+  // 4. Billing & Subscriptions
   async listPlans(): Promise<BillingPlan[]> {
-    const data = await req<any>("/v1/billing/plans", undefined, true);
+    const data = await req<any>("/v1/billing/plans");
     if (Array.isArray(data)) return data;
     if (data.plans) return Array.isArray(data.plans) ? data.plans : Object.values(data.plans);
     return [];
   },
 
-  async listSubscriptions(): Promise<SubscriptionInfo[]> {
-    const data = await req<any>("/v1/billing/subscriptions", undefined, true);
+  async listSubscriptions(tenantId?: string): Promise<SubscriptionInfo[]> {
+    const query = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : "";
+    const data = await req<any>(`/v1/billing/subscriptions${query}`);
     return Array.isArray(data) ? data : (data.subscriptions || []);
   },
 
@@ -265,26 +189,27 @@ export const api = {
     return req<SubscriptionInfo>("/v1/billing/subscribe", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenantId, tier }),
-    }, true);
+    });
   },
 
-  // 6. Interactive Chat / Inference Playground
+  // 5. Interactive Chat / Inference Playground (Using session or direct inference)
   async sendPlaygroundInference(
     prompt: string,
     model = "gpt-4o-mini",
     tags?: string[],
-    namespace?: string
+    namespace?: string,
+    apiKey?: string
   ): Promise<PlaygroundResponse> {
     const startTime = performance.now();
     const headers: Record<string, string> = {};
     if (tags?.length) headers["X-CacheMind-Tags"] = tags.join(",");
     if (namespace) headers["X-CacheMind-Namespace"] = namespace;
+    if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
     const res = await fetch(`${API_BASE}/v1/chat/completions`, {
       method: "POST",
       credentials: "include",
       headers: {
-        Authorization: `Bearer ${getApiKey()}`,
         "Content-Type": "application/json",
         ...headers,
       },

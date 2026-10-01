@@ -21,9 +21,9 @@ const SNIPPETS: CodeSnippet[] = [
 
 # Initialize CacheMind high-performance client
 client = CacheMindClient(
-    api_key="cm_live_7a8b9c0d1e2f3a4b",
+    api_key="cm_live_your_project_key_here",
     similarity_threshold=0.92, # FastEmbed 384D BGE-Small Cosine
-    tenant_id="tenant_production_01"
+    tenant_id="your_workspace_id"
 )
 
 # Semantic-aware completion call (< 1.5ms on hit)
@@ -80,7 +80,7 @@ runInference();`,
 # 1-Line Drop-in replacement! Point base_url to CacheMind Gateway
 client = OpenAI(
     base_url="https://api.cachemind.ai/v1",
-    api_key="cm_live_development_test_key_000000000000000000000000"
+    api_key="cm_live_your_project_key_here"
 )
 
 # Standard OpenAI call — automatically accelerated by CacheMind L1/L2
@@ -101,7 +101,7 @@ print(response.choices[0].message.content)`,
     filename: "request.sh",
     highlight: "Standard HTTP REST API for any programming language",
     code: `curl -X POST https://api.cachemind.ai/v1/chat/completions \\
-  -H "Authorization: Bearer cm_live_7a8b9c0d1e2f3a4b" \\
+  -H "Authorization: Bearer cm_live_your_project_key_here" \\
   -H "Content-Type: application/json" \\
   -H "X-CacheMind-Similarity-Threshold: 0.92" \\
   -d '{
