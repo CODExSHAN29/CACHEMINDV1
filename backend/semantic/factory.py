@@ -1,17 +1,20 @@
 """
 Semantic Cache Factory — Provides singleton instances for semantic caching components.
 
-Manages the lifecycle of EmbeddingEngine, VectorIndex, GuardrailArbiter, and VolatilityEngine,
-enabling dependency injection for testing and consistent configuration.
+Manages the lifecycle of EmbeddingEngine, SemanticCacheBackend (VectorIndex / PgVector / Qdrant),
+GuardrailArbiter, and VolatilityEngine, enabling dependency injection for testing and
+authoritative configuration.
 """
 
-from typing import List, Optional
+import logging
+from typing import Any, Dict, List, Optional
 
 from .embedding import EmbeddingEngine, get_embedding_engine, set_embedding_engine
-from .vector_index import VectorIndex, get_vector_index, set_vector_index
-from .models import SemanticCacheEntry
+from .vector_index import SemanticCandidate, VectorIndex, get_vector_index, set_vector_index
 from .backend import SemanticCacheBackend
 from backend.app.config import settings
+
+logger = logging.getLogger("cachemind.semantic.factory")
 
 try:
     from .pgvector_backend import PgVectorSemanticBackend
@@ -23,11 +26,15 @@ try:
 except Exception:
     QdrantSemanticBackend = None  # type: ignore
 
+_cached_vector_backend: Optional[SemanticCacheBackend] = None
+_cached_backend_type: Optional[str] = None
+_cached_semantic_service: Optional["SemanticCacheService"] = None
+
 
 class SemanticCacheFactory:
     """
     Factory for creating and managing semantic cache service components.
-    Delegates directly to module-level singleton providers.
+    Delegates directly to module-level singleton providers and respects VECTOR_BACKEND config.
     """
 
     @staticmethod
@@ -40,11 +47,16 @@ class SemanticCacheFactory:
 
     @staticmethod
     def get_vector_index() -> VectorIndex:
-        return get_vector_index()
+        return get_vector_index(
+            dim=settings.VECTOR_DIMENSION,
+            threshold=settings.VECTOR_SIMILARITY_THRESHOLD,
+        )
 
     @staticmethod
     def set_vector_index(index: Optional[VectorIndex]) -> None:
         set_vector_index(index)
+        if index is not None:
+            SemanticCacheFactory.set_vector_backend(index)
 
     @staticmethod
     def get_arbiter():
@@ -68,19 +80,86 @@ class SemanticCacheFactory:
 
     @staticmethod
     def get_vector_backend() -> SemanticCacheBackend:
-        backend = settings.VECTOR_BACKEND
-        if backend == "pgvector" and PgVectorSemanticBackend is not None:
-            return PgVectorSemanticBackend()
-        elif backend == "qdrant" and QdrantSemanticBackend is not None:
-            return QdrantSemanticBackend()
-        return get_semantic_cache_service()
+        """
+        Authoritatively resolves the configured L2 vector backend.
+
+        In production, missing dependencies for configured pgvector or qdrant
+        will fail-closed by raising a RuntimeError.
+        """
+        global _cached_vector_backend, _cached_backend_type
+        backend_type = (settings.VECTOR_BACKEND or "memory").lower()
+        if _cached_vector_backend is not None and _cached_backend_type == backend_type:
+            return _cached_vector_backend
+
+        if backend_type == "pgvector":
+            if PgVectorSemanticBackend is None:
+                if settings.ENVIRONMENT == "production":
+                    raise RuntimeError("Configured VECTOR_BACKEND='pgvector' is unavailable in production")
+                logger.warning("PgVectorSemanticBackend unavailable; falling back to in-memory VectorIndex")
+                _cached_vector_backend = get_vector_index(
+                    dim=settings.VECTOR_DIMENSION,
+                    threshold=settings.VECTOR_SIMILARITY_THRESHOLD,
+                )
+            else:
+                _cached_vector_backend = PgVectorSemanticBackend(
+                    default_threshold=settings.VECTOR_SIMILARITY_THRESHOLD,
+                )
+        elif backend_type == "qdrant":
+            if QdrantSemanticBackend is None:
+                if settings.ENVIRONMENT == "production":
+                    raise RuntimeError("Configured VECTOR_BACKEND='qdrant' is unavailable in production")
+                logger.warning("QdrantSemanticBackend unavailable; falling back to in-memory VectorIndex")
+                _cached_vector_backend = get_vector_index(
+                    dim=settings.VECTOR_DIMENSION,
+                    threshold=settings.VECTOR_SIMILARITY_THRESHOLD,
+                )
+            else:
+                _cached_vector_backend = QdrantSemanticBackend(
+                    default_threshold=settings.VECTOR_SIMILARITY_THRESHOLD,
+                    dimension=settings.VECTOR_DIMENSION,
+                )
+        else:
+            _cached_vector_backend = get_vector_index(
+                dim=settings.VECTOR_DIMENSION,
+                threshold=settings.VECTOR_SIMILARITY_THRESHOLD,
+            )
+
+        _cached_backend_type = backend_type
+        return _cached_vector_backend
+
+    @staticmethod
+    def set_vector_backend(backend: Optional[SemanticCacheBackend]) -> None:
+        global _cached_vector_backend, _cached_backend_type
+        _cached_vector_backend = backend
+        _cached_backend_type = (settings.VECTOR_BACKEND or "memory").lower() if backend is not None else None
 
     @staticmethod
     def get_semantic_cache_service() -> "SemanticCacheService":
-        return get_semantic_cache_service()
+        global _cached_semantic_service
+        if _cached_semantic_service is None:
+            _cached_semantic_service = SemanticCacheService()
+        return _cached_semantic_service
+
+    @staticmethod
+    def set_semantic_cache_service(service: Optional["SemanticCacheService"]) -> None:
+        global _cached_semantic_service
+        _cached_semantic_service = service
+        if service is not None:
+            if service.embedding_engine:
+                SemanticCacheFactory.set_embedding_engine(service.embedding_engine)
+            if service.backend:
+                SemanticCacheFactory.set_vector_backend(service.backend)
+            if service.arbiter:
+                SemanticCacheFactory.set_arbiter(service.arbiter)
+            if service.volatility_engine:
+                SemanticCacheFactory.set_volatility_engine(service.volatility_engine)
 
     @staticmethod
     def reset_singletons() -> None:
+        global _cached_vector_backend, _cached_backend_type, _cached_semantic_service
+        _cached_vector_backend = None
+        _cached_backend_type = None
+        _cached_semantic_service = None
         set_embedding_engine(None)
         set_vector_index(None)
         from backend.guardrails.factory import set_guardrail_arbiter, set_volatility_engine
@@ -92,23 +171,69 @@ class SemanticCacheService(SemanticCacheBackend):
     """
     Main orchestration service for L2 semantic cache operations.
 
-    Combines embedding generation, vector search, guardrail evaluation,
-    and volatility-based TTL assignment into a cohesive service.
+    Combines embedding generation, vector search (via configured SemanticCacheBackend),
+    guardrail safety evaluation, and volatility-based TTL assignment into a cohesive service.
     """
 
     def __init__(
         self,
         embedding_engine: Optional[EmbeddingEngine] = None,
-        vector_index: Optional[VectorIndex] = None,
+        backend: Optional[SemanticCacheBackend] = None,
         arbiter=None,
         volatility_engine=None,
-        default_similarity_threshold: float = 0.92,
+        default_similarity_threshold: Optional[float] = None,
+        vector_index: Optional[SemanticCacheBackend] = None,
     ) -> None:
-        self.embedding_engine = embedding_engine or SemanticCacheFactory.get_embedding_engine()
-        self.vector_index = vector_index or SemanticCacheFactory.get_vector_index()
-        self.arbiter = arbiter or SemanticCacheFactory.get_arbiter()
-        self.volatility_engine = volatility_engine or SemanticCacheFactory.get_volatility_engine()
-        self.default_similarity_threshold = default_similarity_threshold
+        self._embedding_engine = embedding_engine
+        self._backend = backend or vector_index
+        self._arbiter = arbiter
+        self._volatility_engine = volatility_engine
+        self.default_similarity_threshold = (
+            default_similarity_threshold
+            if default_similarity_threshold is not None
+            else settings.VECTOR_SIMILARITY_THRESHOLD
+        )
+
+    @property
+    def embedding_engine(self) -> EmbeddingEngine:
+        return self._embedding_engine or SemanticCacheFactory.get_embedding_engine()
+
+    @embedding_engine.setter
+    def embedding_engine(self, val: Optional[EmbeddingEngine]) -> None:
+        self._embedding_engine = val
+
+    @property
+    def backend(self) -> SemanticCacheBackend:
+        return self._backend or SemanticCacheFactory.get_vector_backend()
+
+    @backend.setter
+    def backend(self, val: Optional[SemanticCacheBackend]) -> None:
+        self._backend = val
+
+    @property
+    def vector_index(self) -> SemanticCacheBackend:
+        """Backwards compatibility alias for self.backend."""
+        return self.backend
+
+    @vector_index.setter
+    def vector_index(self, val: SemanticCacheBackend) -> None:
+        self.backend = val
+
+    @property
+    def arbiter(self):
+        return self._arbiter or SemanticCacheFactory.get_arbiter()
+
+    @arbiter.setter
+    def arbiter(self, val) -> None:
+        self._arbiter = val
+
+    @property
+    def volatility_engine(self):
+        return self._volatility_engine or SemanticCacheFactory.get_volatility_engine()
+
+    @volatility_engine.setter
+    def volatility_engine(self, val) -> None:
+        self._volatility_engine = val
 
     async def insert(
         self,
@@ -122,48 +247,37 @@ class SemanticCacheService(SemanticCacheBackend):
         provider: str = "unknown",
         model: str = "unknown",
         ttl_seconds: Optional[int] = None,
+        tenant_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        namespace: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> None:
         """
         Stores a vector entry under scope_hash partition with volatility-based TTL.
-
-        Args:
-            scope_hash: Namespace partition (tenant+project+model+system_prompt)
-            exact_request_hash: Unique hash of the exact request
-            vector: 384-dim embedding vector
-            response_payload: Cached upstream response dict
-            created_at: Unix timestamp when this entry was created
-            input_text: The user message text used for embedding
-            system_prompt: System message in request (if any)
-            provider: LLM provider (openai, anthropic, etc.)
-            model: Model identifier
-            ttl_seconds: Optional TTL override; if None, determined by volatility engine
         """
-        # Determine TTL based on volatility if not explicitly provided
-        if ttl_seconds is None:
-            volatility_classification = await self.volatility_engine.classify(input_text)
-            ttl_seconds = volatility_classification.ttl_seconds
+        if ttl_seconds is None and self.volatility_engine:
+            try:
+                volatility_classification = await self.volatility_engine.classify(input_text)
+                ttl_seconds = volatility_classification.ttl_seconds
+            except Exception as e:
+                logger.warning(f"Volatility classification failed; using default TTL: {e}")
+                ttl_seconds = settings.DEFAULT_CACHE_TTL_SECONDS
 
-        # Create cache entry
-        entry = SemanticCacheEntry(
-            exact_request_hash=exact_request_hash,
+        await self.backend.insert(
             scope_hash=scope_hash,
+            exact_request_hash=exact_request_hash,
             vector=vector,
             response_payload=response_payload,
+            created_at=created_at,
+            input_text=input_text,
+            system_prompt=system_prompt,
             provider=provider,
             model=model,
-            system_prompt=system_prompt,
-            input_text=input_text,
-            created_at=created_at,
             ttl_seconds=ttl_seconds,
-        )
-
-        # Store in vector index
-        await self.vector_index.insert(
-            scope_hash=scope_hash,
-            exact_request_hash=exact_request_hash,
-            vector=vector,
-            response_payload=response_payload,
-            created_at=created_at,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            namespace=namespace,
+            tags=tags,
         )
 
     async def search(
@@ -172,77 +286,81 @@ class SemanticCacheService(SemanticCacheBackend):
         scope_hash: str,
         top_k: int = 5,
         similarity_threshold: Optional[float] = None,
-    ) -> List[SemanticCacheEntry]:
+    ) -> List[SemanticCandidate]:
         """
-        Search for semantic cache hits within a scope.
-
-        Args:
-            query_vector: 384-dim query embedding
-            scope_hash: Namespace to search within
-            top_k: Number of candidates to return
-            similarity_threshold: Optional threshold override
-
-        Returns:
-            List of SemanticCacheEntry objects sorted by similarity descending
+        Search for semantic cache candidates within a scope using the configured backend.
         """
-        threshold = similarity_threshold or self.default_similarity_threshold
-
-        # Get vector candidates from index
-        candidates = await self.vector_index.search(
+        threshold = (
+            similarity_threshold
+            if similarity_threshold is not None
+            else self.default_similarity_threshold
+        )
+        return await self.backend.search(
             query_vector=query_vector,
             scope_hash=scope_hash,
             top_k=top_k,
+            similarity_threshold=threshold,
         )
 
-        # Convert to SemanticCacheEntry objects (need to reconstruct from stored data)
-        # This is simplified - in practice we'd need to fetch the full entries
-        # For now, we'll return the raw candidates and let the service layer handle conversion
-        return candidates  # This returns SemanticCandidate, need to adjust
-
     async def delete(self, exact_request_hash: str) -> bool:
-        """Deletes entry by exact_request_hash."""
-        return await self.vector_index.delete(exact_request_hash)
+        """Deletes entry by exact_request_hash from backend."""
+        return await self.backend.delete(exact_request_hash)
+
+    async def delete_by_scope(self, scope_hash: str) -> int:
+        """Deletes all entries matching scope_hash from backend."""
+        return await self.backend.delete_by_scope(scope_hash)
+
+    async def delete_by_tenant(self, tenant_id: str) -> int:
+        """Deletes all entries matching tenant_id from backend."""
+        return await self.backend.delete_by_tenant(tenant_id)
+
+    async def inspect_key(self, exact_request_hash: str) -> Optional[Dict[str, Any]]:
+        """Retrieves detailed inspection information for a cached key."""
+        return await self.backend.inspect_key(exact_request_hash)
+
+    async def get_stats(self) -> Dict[str, Any]:
+        """Returns statistics from backend."""
+        return await self.backend.get_stats()
 
     async def ping(self) -> bool:
         """Health check - verifies all components are responsive."""
         try:
             # Test embedding engine
-            test_embedding = await self.embedding_engine.embed("test")
+            if self.embedding_engine:
+                await self.embedding_engine.embed("test")
 
-            # Test vector index
-            await self.vector_index.ping()
+            # Test vector backend
+            if self.backend:
+                backend_healthy = await self.backend.ping()
+                if not backend_healthy:
+                    return False
 
             # Test arbiter
-            await self.arbiter.evaluate("test", "test")
+            if self.arbiter:
+                await self.arbiter.evaluate("test", "test")
 
             # Test volatility engine
-            await self.volatility_engine.classify("test")
+            if self.volatility_engine:
+                await self.volatility_engine.classify("test")
 
             return True
-        except Exception:
+        except Exception as e:
+            logger.warning(f"SemanticCacheService ping failed: {e}")
             return False
 
     async def clear(self) -> None:
         """Clears all entries (test isolation)."""
-        await self.vector_index.clear()
+        await self.backend.clear()
 
 
 def get_semantic_cache_service() -> SemanticCacheService:
     """Returns singleton SemanticCacheService instance."""
-    return SemanticCacheService()
+    return SemanticCacheFactory.get_semantic_cache_service()
 
 
-def set_semantic_cache_service(service: SemanticCacheService) -> None:
+def set_semantic_cache_service(service: Optional[SemanticCacheService]) -> None:
     """Explicitly sets or overrides semantic cache service (for tests)."""
-    # Override the factory singletons
-    if service.embedding_engine:
-        SemanticCacheFactory.set_embedding_engine(service.embedding_engine)
-    if service.vector_index:
-        SemanticCacheFactory.set_vector_index(service.vector_index)
-    if service.arbiter:
-        SemanticCacheFactory.set_arbiter(service.arbiter)
-    if service.volatility_engine:
-        SemanticCacheFactory.set_volatility_engine(service.volatility_engine)
+    SemanticCacheFactory.set_semantic_cache_service(service)
 
 
 __all__ = [

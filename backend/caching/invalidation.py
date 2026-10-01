@@ -62,7 +62,7 @@ class CacheManagementService:
         l1_deleted = await cache_backend.delete(project_id, exact_request_hash)
         l2_deleted = False
         try:
-            l2_deleted = await semantic_service.vector_index.delete(exact_request_hash)
+            l2_deleted = await semantic_service.backend.delete(exact_request_hash)
         except Exception as exc:
             logger.warning("Error deleting vector entry %s: %s", exact_request_hash, exc)
 
@@ -112,15 +112,17 @@ class CacheManagementService:
         except Exception as exc:
             logger.error("Error purging L1 cache for project %s: %s", project_id, exc)
 
-        # Purge L2 Semantic Vector Index
+        # Purge L2 Semantic Vector Backend
         try:
-            vector_stats = await semantic_service.vector_index.get_stats()
-            scopes = vector_stats.get("scopes", {})
-            for sh in list(scopes.keys()):
-                del_count = await semantic_service.vector_index.delete_by_scope(sh)
-                purged_l2 += del_count
+            purged_l2 = await semantic_service.backend.delete_by_tenant(tenant_id)
+            if purged_l2 == 0:
+                vector_stats = await semantic_service.backend.get_stats()
+                scopes = vector_stats.get("scopes", {})
+                for sh in list(scopes.keys()):
+                    del_count = await semantic_service.backend.delete_by_scope(sh)
+                    purged_l2 += del_count
         except Exception as exc:
-            logger.error("Error purging L2 vector index for project %s: %s", project_id, exc)
+            logger.error("Error purging L2 vector backend for project %s: %s", project_id, exc)
 
         return CachePurgeResult(
             tenant_id=tenant_id,

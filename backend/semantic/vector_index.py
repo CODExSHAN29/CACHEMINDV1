@@ -12,6 +12,9 @@ so cache namespaces never leak across models or system prompts.
 """
 
 import asyncio
+from dataclasses import dataclass
+from datetime import datetime, timezone
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -60,6 +63,23 @@ class SemanticCandidate:
         return self.similarity >= threshold
 
 
+@dataclass
+class StoredVectorEntry:
+    """Internal metadata container for an in-memory vector index record."""
+    vector: List[float]
+    response_payload: Dict[str, Any]
+    created_at: float
+    input_text: str = ""
+    system_prompt: Optional[str] = None
+    provider: str = "unknown"
+    model: str = "unknown"
+    ttl_seconds: Optional[int] = None
+    tenant_id: Optional[str] = None
+    project_id: Optional[str] = None
+    namespace: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
 class VectorIndex:
     """
     In-memory vector index for semantic cache search.
@@ -88,7 +108,7 @@ class VectorIndex:
         return cls._instance
 
     def __init__(self, dim: int = DEFAULT_DIM, threshold: float = DEFAULT_THRESHOLD, max_entries: int = MAX_ENTRIES_DEFAULT) -> None:
-        if self._initialized:
+        if getattr(self, "_initialized", False):
             return
         self._initialized = True
 
@@ -96,9 +116,8 @@ class VectorIndex:
         self._threshold = threshold
         self._max_entries = max_entries
 
-        # Scope hash -> {exact_request_hash -> (vector, payload, created_at)}
-        # This structure allows partitioning and quick lookup per namespace
-        self._entries_by_scope: Dict[str, Dict[str, Tuple[List[float], Dict[str, Any], float]]] = {}
+        # Scope hash -> {exact_request_hash -> StoredVectorEntry}
+        self._entries_by_scope: Dict[str, Dict[str, StoredVectorEntry]] = {}
 
         # Global index for cross-scope search (when needed)
         self._global_vectors: List[List[float]] = []
@@ -110,7 +129,6 @@ class VectorIndex:
         if HNSWLIBAVAILABLE:
             try:
                 self._hnsw_index = hnswlib.Index(space="cosine", dim=dim)
-                # Set space parameters for better recall
                 self._hnsw_index.set_hnsw_ef(40)  # search elevation factor
                 self._hnsw_index.set_max_elements(max_entries)
                 self._use_hnsw = True
@@ -163,53 +181,56 @@ class VectorIndex:
             vector: 384-dim embedding vector
             response_payload: Cached upstream response dict
             created_at: Unix timestamp when this entry was created
+            input_text: Input prompt text
+            system_prompt: Optional system prompt
+            provider: LLM provider
+            model: Model identifier
+            ttl_seconds: Cache TTL in seconds
+            tenant_id: Multi-tenant tenant identifier
+            project_id: Multi-tenant project identifier
+            namespace: Optional custom namespace
+            tags: Optional tags
         """
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._insert_sync, scope_hash, exact_request_hash, vector, response_payload, created_at)
+        entry = StoredVectorEntry(
+            vector=vector,
+            response_payload=response_payload,
+            created_at=created_at,
+            input_text=input_text,
+            system_prompt=system_prompt,
+            provider=provider,
+            model=model,
+            ttl_seconds=ttl_seconds,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            namespace=namespace,
+            tags=tags,
+        )
+        await loop.run_in_executor(None, self._insert_sync, scope_hash, exact_request_hash, entry)
 
     def _insert_sync(
         self,
         scope_hash: str,
         exact_request_hash: str,
-        vector: List[float],
-        response_payload: Dict[str, Any],
-        created_at: float,
+        entry: StoredVectorEntry,
     ) -> None:
         """Synchronous insert (called from executor)."""
-        # Ensure scope dict exists
         if scope_hash not in self._entries_by_scope:
             self._entries_by_scope[scope_hash] = {}
 
-        # Store under scope partition
-        self._entries_by_scope[scope_hash][exact_request_hash] = (
-            vector,
-            response_payload,
-            created_at,
-        )
+        self._entries_by_scope[scope_hash][exact_request_hash] = entry
 
         # Update global structures for cross-scope search
         self._ensure_global_capacity()
-        pos = len(self._global_scope_hashes)
         self._global_scope_hashes.append(scope_hash)
         self._global_exact_hashes.append(exact_request_hash)
-        self._global_vectors.append(vector)
+        self._global_vectors.append(entry.vector)
 
         # Enforce max entries
-        if len(self._global_vectors) > self._global_max_size:
-            # Remove oldest entry
-            # Find oldest by created_at across all entries
-            oldest_idx = 0
-            oldest_time = float('inf')
-            for i, vec in enumerate(self._global_vectors):
-                # Find the entry's created_at - simplified: use position
-                # In production, track separately; for now just pop first
-                pass
-            # For simplicity, just prune when we exceed; this is a best-effort cache
-            if len(self._global_vectors) > self._global_max_size * 2:
-                # Remove first entry
-                self._global_vectors.pop(0)
-                self._global_scope_hashes.pop(0)
-                self._global_exact_hashes.pop(0)
+        if len(self._global_vectors) > self._global_max_size * 2:
+            self._global_vectors.pop(0)
+            self._global_scope_hashes.pop(0)
+            self._global_exact_hashes.pop(0)
 
         self.log(f"Inserted entry {exact_request_hash[:8]} into scope {scope_hash[:8]}")
 
@@ -218,7 +239,8 @@ class VectorIndex:
         query_vector: List[float],
         scope_hash: str,
         top_k: int = 5,
-    ) -> List["SemanticCandidate"]:
+        similarity_threshold: Optional[float] = None,
+    ) -> List[SemanticCandidate]:
         """
         Search for nearest neighbors within a single scope.
 
@@ -229,110 +251,110 @@ class VectorIndex:
             query_vector: 384-dim query embedding
             scope_hash: Namespace to search within
             top_k: Number of candidates to return
+            similarity_threshold: Minimum cosine similarity required (defaults to self._threshold)
 
         Returns:
             List of SemanticCandidate, sorted by similarity descending.
             Only candidates with similarity >= threshold are included.
         """
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._search_sync, query_vector, scope_hash, top_k)
+        threshold = similarity_threshold if similarity_threshold is not None else self._threshold
+        return await loop.run_in_executor(None, self._search_sync, query_vector, scope_hash, top_k, threshold)
 
     def _search_sync(
         self,
         query_vector: List[float],
         scope_hash: str,
         top_k: int,
-    ) -> List["SemanticCandidate"]:
+        threshold: float,
+    ) -> List[SemanticCandidate]:
         """Synchronous search (called from executor)."""
-        # First, try entries within the same scope
         scope_entries = self._entries_by_scope.get(scope_hash, {})
-
         if not scope_entries:
             return []
 
-        # Compute cosine similarity for entries in this scope
         query_vec = np.array(query_vector, dtype=np.float32)
         query_norm = np.linalg.norm(query_vec)
+        if query_norm == 0.0:
+            return []
 
-        candidates: List[Tuple[str, float, Dict[str, Any]]] = []
+        candidates: List[Tuple[str, float, StoredVectorEntry]] = []
 
-        for exact_hash, (stored_vec, payload, created_at) in scope_entries.items():
-            stored_vec_np = np.array(stored_vec, dtype=np.float32)
+        for exact_hash, entry in scope_entries.items():
+            stored_vec_np = np.array(entry.vector, dtype=np.float32)
             stored_norm = np.linalg.norm(stored_vec_np)
 
-            if query_norm > 0 and stored_norm > 0:
+            if stored_norm > 0:
                 cos_sim = float(np.dot(query_vec, stored_vec_np) / (query_norm * stored_norm))
             else:
                 cos_sim = 0.0
 
-            if cos_sim >= self._threshold:
-                candidates.append((exact_hash, cos_sim, payload))
+            if cos_sim >= threshold:
+                candidates.append((exact_hash, cos_sim, entry))
 
-        # Sort by similarity descending
         candidates.sort(key=lambda x: x[1], reverse=True)
 
-        # Return top_k as SemanticCandidate objects
         results = []
-        for exact_hash, similarity, payload in candidates[:top_k]:
+        for exact_hash, similarity, entry in candidates[:top_k]:
             results.append(SemanticCandidate(
                 exact_request_hash=exact_hash,
                 scope_hash=scope_hash,
                 similarity=similarity,
-                response_payload=payload,
-                created_at=0.0,  # will be set by caller if needed
+                response_payload=entry.response_payload,
+                created_at=entry.created_at,
             ))
 
-        self.log(f"Search in scope {scope_hash[:8]}: found {len(results)} candidates above threshold {self._threshold}")
+        self.log(f"Search in scope {scope_hash[:8]}: found {len(results)} candidates above threshold {threshold}")
         return results
 
     async def search_cross_scope(
         self,
         query_vector: List[float],
         top_k: int = 10,
-    ) -> List["SemanticCandidate"]:
-        """
-        Search across ALL scopes (useful for debugging or global queries).
-
-        Less common; the primary use case is search-within-scope.
-        """
+        similarity_threshold: Optional[float] = None,
+    ) -> List[SemanticCandidate]:
+        """Search across ALL scopes (useful for debugging or global queries)."""
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._search_cross_scope_sync, query_vector, top_k)
+        threshold = similarity_threshold if similarity_threshold is not None else self._threshold
+        return await loop.run_in_executor(None, self._search_cross_scope_sync, query_vector, top_k, threshold)
 
     def _search_cross_scope_sync(
         self,
         query_vector: List[float],
         top_k: int,
-    ) -> List["SemanticCandidate"]:
+        threshold: float,
+    ) -> List[SemanticCandidate]:
         """Synchronous cross-scope search."""
         query_vec = np.array(query_vector, dtype=np.float32)
         query_norm = np.linalg.norm(query_vec)
+        if query_norm == 0.0:
+            return []
 
-        candidates: List[Tuple[str, float, str, Dict[str, Any]]] = []
+        candidates: List[Tuple[str, float, str, StoredVectorEntry]] = []
 
         for scope_hash, entries in self._entries_by_scope.items():
-            for exact_hash, (stored_vec, payload, created_at) in entries.items():
-                stored_vec_np = np.array(stored_vec, dtype=np.float32)
+            for exact_hash, entry in entries.items():
+                stored_vec_np = np.array(entry.vector, dtype=np.float32)
                 stored_norm = np.linalg.norm(stored_vec_np)
 
-                if query_norm > 0 and stored_norm > 0:
+                if stored_norm > 0:
                     cos_sim = float(np.dot(query_vec, stored_vec_np) / (query_norm * stored_norm))
                 else:
                     cos_sim = 0.0
 
-                if cos_sim >= self._threshold:
-                    candidates.append((exact_hash, cos_sim, scope_hash, payload))
+                if cos_sim >= threshold:
+                    candidates.append((exact_hash, cos_sim, scope_hash, entry))
 
-        # Sort by similarity descending
         candidates.sort(key=lambda x: x[1], reverse=True)
 
         results = []
-        for exact_hash, similarity, scope, payload in candidates[:top_k]:
+        for exact_hash, similarity, scope, entry in candidates[:top_k]:
             results.append(SemanticCandidate(
                 exact_request_hash=exact_hash,
                 scope_hash=scope,
                 similarity=similarity,
-                response_payload=payload,
-                created_at=0.0,
+                response_payload=entry.response_payload,
+                created_at=entry.created_at,
             ))
 
         return results
@@ -350,10 +372,12 @@ class VectorIndex:
         """Synchronous delete (called from executor)."""
         deleted_any = False
 
-        for scope_hash, entries in self._entries_by_scope.items():
+        for scope_hash, entries in list(self._entries_by_scope.items()):
             if exact_request_hash in entries:
                 del entries[exact_request_hash]
                 deleted_any = True
+                if not entries:
+                    del self._entries_by_scope[scope_hash]
 
         # Also remove from global structures
         while exact_request_hash in self._global_exact_hashes:
@@ -390,6 +414,65 @@ class VectorIndex:
 
         return deleted_count
 
+    async def delete_by_tenant(self, tenant_id: str) -> int:
+        """Delete all entries belonging to a specific tenant across all scopes."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._delete_by_tenant_sync, tenant_id)
+
+    def _delete_by_tenant_sync(self, tenant_id: str) -> int:
+        deleted_count = 0
+        keys_to_delete = []
+
+        for scope_hash, entries in self._entries_by_scope.items():
+            for exact_hash, entry in entries.items():
+                if entry.tenant_id == tenant_id:
+                    keys_to_delete.append(exact_hash)
+
+        for exact_hash in keys_to_delete:
+            if self._delete_sync(exact_hash):
+                deleted_count += 1
+
+        return deleted_count
+
+    async def inspect_key(self, exact_request_hash: str) -> Optional[Dict[str, Any]]:
+        """Retrieves detailed inspection information for a single vector cache entry."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._inspect_key_sync, exact_request_hash)
+
+    def _inspect_key_sync(self, exact_request_hash: str) -> Optional[Dict[str, Any]]:
+        for scope_hash, entries in self._entries_by_scope.items():
+            if exact_request_hash in entries:
+                entry = entries[exact_request_hash]
+                now = time.time()
+                created_dt = datetime.fromtimestamp(entry.created_at, tz=timezone.utc)
+                expires_iso = None
+                ttl_remaining = None
+                if entry.ttl_seconds and entry.ttl_seconds > 0:
+                    expires_at_ts = entry.created_at + entry.ttl_seconds
+                    expires_iso = datetime.fromtimestamp(expires_at_ts, tz=timezone.utc).isoformat()
+                    ttl_remaining = max(0, int(expires_at_ts - now))
+
+                return {
+                    "id": exact_request_hash,
+                    "exact_request_hash": exact_request_hash,
+                    "scope_hash": scope_hash,
+                    "tenant_id": entry.tenant_id,
+                    "project_id": entry.project_id,
+                    "provider": entry.provider,
+                    "model": entry.model,
+                    "system_prompt": entry.system_prompt,
+                    "input_text": entry.input_text,
+                    "namespace": entry.namespace,
+                    "tags": entry.tags or [],
+                    "created_at": created_dt.isoformat(),
+                    "expires_at": expires_iso,
+                    "ttl_seconds": entry.ttl_seconds,
+                    "ttl_remaining_seconds": ttl_remaining,
+                    "has_embedding": bool(entry.vector),
+                    "embedding_dimension": len(entry.vector) if entry.vector else 0,
+                }
+        return None
+
     async def get_stats(self) -> Dict[str, Any]:
         """Returns statistics on stored vectors and partitions."""
         loop = asyncio.get_running_loop()
@@ -398,6 +481,7 @@ class VectorIndex:
     def _get_stats_sync(self) -> Dict[str, Any]:
         total_entries = sum(len(entries) for entries in self._entries_by_scope.values())
         return {
+            "backend": "memory",
             "total_entries": total_entries,
             "total_scopes": len(self._entries_by_scope),
             "scopes": {sh: len(entries) for sh, entries in self._entries_by_scope.items()},
@@ -426,14 +510,12 @@ class VectorIndex:
         return (
             self._dim > 0
             and self._entries_by_scope is not None
-            and self._entries_by_scope is not None
         )
 
     def _ensure_global_capacity(self) -> None:
         """Ensure global structures have room for new entries."""
         current = len(self._global_vectors)
         if current >= self._global_max_size:
-            # Trim to max_entries (keep most recent)
             excess = current - self._global_max_size + 1
             self._global_vectors = self._global_vectors[excess:]
             self._global_scope_hashes = self._global_scope_hashes[excess:]
@@ -452,10 +534,12 @@ def get_vector_index(
     return _cached_vector_index_instance
 
 
-def set_vector_index(idx: VectorIndex) -> None:
+def set_vector_index(idx: Optional[VectorIndex]) -> None:
     """Explicitly sets or overrides vector index instance (for tests)."""
     global _cached_vector_index_instance
     _cached_vector_index_instance = idx
+    if idx is None:
+        VectorIndex._instance = None
 
 
 class MockVectorIndex:
@@ -468,8 +552,7 @@ class MockVectorIndex:
     def __init__(self, dim: int = 384, threshold: float = 0.92) -> None:
         self._dim = dim
         self._threshold = threshold
-        self._entries: Dict[str, Tuple[List[float], Dict[str, Any], float]] = {}
-        self._rng = __import__("numpy").random.default_rng(42)
+        self._entries: Dict[str, Tuple[List[float], Dict[str, Any], float, Optional[str]]] = {}
 
     async def insert(
         self,
@@ -478,23 +561,34 @@ class MockVectorIndex:
         vector: List[float],
         response_payload: Dict[str, Any],
         created_at: float,
+        input_text: str = "",
+        system_prompt: Optional[str] = None,
+        provider: str = "unknown",
+        model: str = "unknown",
+        ttl_seconds: Optional[int] = None,
+        tenant_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        namespace: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> None:
-        self._entries[exact_request_hash] = (vector, response_payload, created_at)
+        self._entries[exact_request_hash] = (vector, response_payload, created_at, tenant_id)
 
     async def search(
         self,
         query_vector: List[float],
         scope_hash: str,
         top_k: int = 5,
+        similarity_threshold: Optional[float] = None,
     ) -> List[SemanticCandidate]:
-        # Deterministic "similarity" based on whether same text was stored
+        threshold = similarity_threshold if similarity_threshold is not None else self._threshold
         candidates = []
-        for exact_hash, (stored_vec, payload, created_at) in self._entries.items():
-            # Simple: compare vectors by cosine similarity
+        for exact_hash, (stored_vec, payload, created_at, _) in self._entries.items():
             vec_a = np.array(query_vector, dtype=np.float32)
             vec_b = np.array(stored_vec, dtype=np.float32)
-            sim = float(np.dot(vec_a, vec_b) / (np.linalg.norm(vec_a) * np.linalg.norm(vec_b)))
-            if sim >= self._threshold:
+            norm_a = np.linalg.norm(vec_a)
+            norm_b = np.linalg.norm(vec_b)
+            sim = float(np.dot(vec_a, vec_b) / (norm_a * norm_b)) if (norm_a > 0 and norm_b > 0) else 0.0
+            if sim >= threshold:
                 candidates.append(SemanticCandidate(
                     exact_request_hash=exact_hash,
                     scope_hash=scope_hash,
@@ -515,8 +609,27 @@ class MockVectorIndex:
     async def delete_by_scope(self, scope_hash: str) -> int:
         return 0
 
+    async def delete_by_tenant(self, tenant_id: str) -> int:
+        keys_to_del = [k for k, v in self._entries.items() if v[3] == tenant_id]
+        for k in keys_to_del:
+            del self._entries[k]
+        return len(keys_to_del)
+
+    async def inspect_key(self, exact_request_hash: str) -> Optional[Dict[str, Any]]:
+        if exact_request_hash in self._entries:
+            _, payload, created_at, tenant_id = self._entries[exact_request_hash]
+            return {
+                "id": exact_request_hash,
+                "exact_request_hash": exact_request_hash,
+                "tenant_id": tenant_id,
+                "created_at": str(created_at),
+                "has_embedding": True,
+            }
+        return None
+
     async def get_stats(self) -> Dict[str, Any]:
         return {
+            "backend": "mock",
             "total_entries": len(self._entries),
             "total_scopes": 1,
             "scopes": {},

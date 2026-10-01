@@ -229,10 +229,11 @@ async def create_chat_completion(
     if last_user_text and not coalescer.is_in_flight(coalesce_key):
         try:
             query_vector = await semantic_service.embedding_engine.embed(last_user_text)
-            candidates = await semantic_service.vector_index.search(
+            candidates = await semantic_service.backend.search(
                 query_vector=query_vector,
                 scope_hash=scope_hash,
                 top_k=5,
+                similarity_threshold=settings.VECTOR_SIMILARITY_THRESHOLD,
             )
 
             for cand in candidates:
@@ -318,8 +319,12 @@ async def create_chat_completion(
                         return StreamingResponse(stream_gen, media_type="text/event-stream", headers=headers)
 
                     return JSONResponse(content=response_body, headers=headers)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("L2 semantic cache lookup failed for request %s: %s", request_id, exc)
+            get_metrics_collector().record_error(
+                error_type="semantic_cache_lookup_error",
+                tenant_id=identity.tenant_id,
+            )
 
     # 6. CACHE MISS -> Resilient Routing Engine with Circuit Breakers & Fallbacks
     cache_status = "MISS"
@@ -441,7 +446,7 @@ async def create_chat_completion(
         ttl_seconds,
     )
 
-    # 7b. L2 Semantic Vector Index Insert
+    # 7b. L2 Semantic Vector Backend Insert
     if last_user_text:
         try:
             if query_vector is None:
@@ -451,15 +456,28 @@ async def create_chat_completion(
             semantic_payload["__cachemind_input_text__"] = last_user_text
             semantic_payload["__cachemind_system_prompt__"] = system_prompt
 
-            await semantic_service.vector_index.insert(
+            await semantic_service.backend.insert(
                 scope_hash=scope_hash,
                 exact_request_hash=exact_request_hash,
                 vector=query_vector,
                 response_payload=semantic_payload,
                 created_at=time.time(),
+                input_text=last_user_text,
+                system_prompt=system_prompt,
+                provider=routing_result.provider_used,
+                model=provider_resp.model,
+                ttl_seconds=ttl_seconds,
+                tenant_id=identity.tenant_id,
+                project_id=identity.project_id,
+                namespace=norm_req.namespace,
+                tags=norm_req.tags,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("L2 semantic cache insertion failed for request %s: %s", request_id, exc)
+            get_metrics_collector().record_error(
+                error_type="semantic_cache_insert_error",
+                tenant_id=identity.tenant_id,
+            )
 
     gateway_latency_ms = (time.perf_counter_ns() - gateway_start_ns) / 1_000_000
 

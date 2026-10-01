@@ -167,12 +167,21 @@ class CacheWarmer:
                     semantic_payload["__cachemind_input_text__"] = last_user_text
                     semantic_payload["__cachemind_system_prompt__"] = sys_prompt
 
-                    await semantic_service.vector_index.insert(
+                    await semantic_service.backend.insert(
                         scope_hash=scope_hash,
                         exact_request_hash=exact_hash,
                         vector=query_vector,
                         response_payload=semantic_payload,
                         created_at=time.time(),
+                        input_text=last_user_text,
+                        system_prompt=sys_prompt,
+                        provider=item.provider,
+                        model=item.model,
+                        ttl_seconds=item.ttl_seconds,
+                        tenant_id=tenant_id,
+                        project_id=project_id,
+                        namespace=item.namespace,
+                        tags=item.tags,
                     )
                     semantic_seeded += 1
 

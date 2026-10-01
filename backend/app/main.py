@@ -107,6 +107,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.error("Embedding warmup failed: %s", str(e))
             # Do not fail startup; first user request will pay cold-start cost
 
+    # --- PHASE 2: Initialize Semantic Vector Backend ---
+    try:
+        from backend.semantic.factory import SemanticCacheFactory
+        vec_backend = SemanticCacheFactory.get_vector_backend()
+        logger.info("Initialized L2 Semantic Vector Backend: %s (%s)", settings.VECTOR_BACKEND, vec_backend.__class__.__name__)
+    except Exception as e:
+        logger.error("Failed to initialize L2 Semantic Vector Backend: %s", str(e))
+        if settings.ENVIRONMENT == "production":
+            raise
+
     yield
     logger.info("Shutting down CacheMind Gateway...")
     provider = get_provider()

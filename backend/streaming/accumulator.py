@@ -202,15 +202,28 @@ class StreamAccumulator:
                 semantic_payload["__cachemind_input_text__"] = self.last_user_text
                 semantic_payload["__cachemind_system_prompt__"] = self.system_prompt
 
-                await semantic_service.vector_index.insert(
+                await semantic_service.backend.insert(
                     scope_hash=self.scope_hash,
                     exact_request_hash=self.exact_request_hash,
                     vector=query_vector,
                     response_payload=semantic_payload,
                     created_at=time.time(),
+                    input_text=self.last_user_text,
+                    system_prompt=self.system_prompt,
+                    provider=self.provider_used,
+                    model=self.accumulated_model,
+                    ttl_seconds=ttl_seconds,
+                    tenant_id=self.identity.tenant_id,
+                    project_id=self.identity.project_id,
+                    namespace=self.norm_req.namespace,
+                    tags=self.norm_req.tags,
                 )
             except Exception as exc:
-                logger.error("Failed to backfill L2 vector index in stream accumulator: %s", exc)
+                logger.error("Failed to backfill L2 semantic cache in stream accumulator: %s", exc)
+                get_metrics_collector().record_error(
+                    error_type="semantic_cache_insert_error",
+                    tenant_id=self.identity.tenant_id,
+                )
 
         # 4. Record Telemetry Log & Prometheus Metrics
         try:
