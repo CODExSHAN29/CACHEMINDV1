@@ -1,3 +1,4 @@
+import logging
 import time
 import uuid
 from typing import Any, Dict, Optional
@@ -22,6 +23,8 @@ from backend.streaming.accumulator import StreamAccumulator
 from backend.streaming.sse import create_cached_stream_generator
 from backend.telemetry.service import TelemetryService
 from backend.semantic.factory import get_semantic_cache_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1", tags=["Chat Completions"])
 

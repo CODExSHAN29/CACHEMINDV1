@@ -280,7 +280,7 @@ class VectorIndex:
 
         candidates: List[Tuple[str, float, StoredVectorEntry]] = []
 
-        for exact_hash, entry in scope_entries.items():
+        for exact_hash, entry in list(scope_entries.items()):
             stored_vec_np = np.array(entry.vector, dtype=np.float32)
             stored_norm = np.linalg.norm(stored_vec_np)
 
@@ -332,8 +332,8 @@ class VectorIndex:
 
         candidates: List[Tuple[str, float, str, StoredVectorEntry]] = []
 
-        for scope_hash, entries in self._entries_by_scope.items():
-            for exact_hash, entry in entries.items():
+        for scope_hash, entries in list(self._entries_by_scope.items()):
+            for exact_hash, entry in list(entries.items()):
                 stored_vec_np = np.array(entry.vector, dtype=np.float32)
                 stored_norm = np.linalg.norm(stored_vec_np)
 
@@ -423,8 +423,8 @@ class VectorIndex:
         deleted_count = 0
         keys_to_delete = []
 
-        for scope_hash, entries in self._entries_by_scope.items():
-            for exact_hash, entry in entries.items():
+        for scope_hash, entries in list(self._entries_by_scope.items()):
+            for exact_hash, entry in list(entries.items()):
                 if entry.tenant_id == tenant_id and entry.project_id == project_id:
                     keys_to_delete.append(exact_hash)
 
@@ -459,8 +459,8 @@ class VectorIndex:
         deleted_count = 0
         keys_to_delete = []
 
-        for scope_hash, entries in self._entries_by_scope.items():
-            for exact_hash, entry in entries.items():
+        for scope_hash, entries in list(self._entries_by_scope.items()):
+            for exact_hash, entry in list(entries.items()):
                 if entry.tenant_id != tenant_id:
                     continue
                 if project_id is not None and entry.project_id != project_id:
@@ -492,8 +492,8 @@ class VectorIndex:
         deleted_count = 0
         keys_to_delete = []
 
-        for scope_hash, entries in self._entries_by_scope.items():
-            for exact_hash, entry in entries.items():
+        for scope_hash, entries in list(self._entries_by_scope.items()):
+            for exact_hash, entry in list(entries.items()):
                 if entry.tenant_id == tenant_id:
                     keys_to_delete.append(exact_hash)
 
@@ -509,7 +509,7 @@ class VectorIndex:
         return await loop.run_in_executor(None, self._inspect_key_sync, exact_request_hash)
 
     def _inspect_key_sync(self, exact_request_hash: str) -> Optional[Dict[str, Any]]:
-        for scope_hash, entries in self._entries_by_scope.items():
+        for scope_hash, entries in list(self._entries_by_scope.items()):
             if exact_request_hash in entries:
                 entry = entries[exact_request_hash]
                 now = time.time()
@@ -548,12 +548,12 @@ class VectorIndex:
         return await loop.run_in_executor(None, self._get_stats_sync)
 
     def _get_stats_sync(self) -> Dict[str, Any]:
-        total_entries = sum(len(entries) for entries in self._entries_by_scope.values())
+        total_entries = sum(len(entries) for entries in list(self._entries_by_scope.values()))
         return {
             "backend": "memory",
             "total_entries": total_entries,
             "total_scopes": len(self._entries_by_scope),
-            "scopes": {sh: len(entries) for sh, entries in self._entries_by_scope.items()},
+            "scopes": {sh: len(entries) for sh, entries in list(self._entries_by_scope.items())},
         }
 
     async def clear(self) -> None:

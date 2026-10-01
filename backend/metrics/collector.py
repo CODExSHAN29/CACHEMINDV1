@@ -92,6 +92,12 @@ class MetricsCollector:
                 ["provider", "model"],
                 registry=self.registry,
             )
+            self.errors_total = Counter(
+                "cachemind_errors_total",
+                "Total runtime errors encountered by CacheMind gateway",
+                ["error_type", "tenant_id"],
+                registry=self.registry,
+            )
         except ValueError as err:
             logger.debug("Metrics already registered in Prometheus registry: %s", err)
 
@@ -165,6 +171,14 @@ class MetricsCollector:
         state_map = {"CLOSED": 0, "HALF_OPEN": 1, "OPEN": 2}
         val = state_map.get(state.upper(), 0)
         self.circuit_breaker_state.labels(provider=provider or "unknown", model=model or "unknown").set(val)
+
+    def record_error(self, error_type: str, tenant_id: str = "default") -> None:
+        """
+        Records an error event counter in Prometheus metrics.
+        """
+        t_id = tenant_id or "default"
+        err_type = error_type or "unknown"
+        self.errors_total.labels(error_type=err_type, tenant_id=t_id).inc()
 
     def export(self) -> bytes:
         """

@@ -174,8 +174,13 @@ class CacheManagementService:
                         usage=None,
                         created_at=None,
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "Error inspecting L2 vector entry %s for project %s: %s",
+                    exact_request_hash,
+                    project_id,
+                    exc,
+                )
 
             return CacheKeyInspection(
                 exact_request_hash=exact_request_hash,
