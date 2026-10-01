@@ -2,7 +2,7 @@
 
 # ⚡ CacheMind
 
-### Enterprise-Grade, Safe & Measurable Semantic Caching Gateway for LLM APIs
+### Deterministic, Safe & Measurable Semantic Caching Gateway for LLM APIs (v0.1 Public Beta)
 
 [![CI & Test Suite](https://github.com/CODExSHAN29/cachemind/actions/workflows/ci.yml/badge.svg)](https://github.com/CODExSHAN29/cachemind/actions/workflows/ci.yml)
 [![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://www.python.org/)
@@ -12,7 +12,7 @@
 [![Tests](https://img.shields.io/badge/tests-143%20passed-success.svg)](#-test-verification--quality-assurance)
 
 <p align="center">
-  <b>Sub-2ms Exact Cache</b> • <b>Sub-8ms Semantic Vector Cache</b> • <b>Single-Flight Coalescing</b> • <b>Anti-Poisoning Guardrails</b> • <b>Multi-Tenant FinOps</b>
+  <b>Deterministic L1 Exact Hash & L2 Quantized Vector Cache</b> • <b>Single-Flight Request Coalescing</b> • <b>Anti-Poisoning Guardrails</b> • <b>FinOps Telemetry</b>
 </p>
 
 </div>
@@ -26,7 +26,7 @@
 - [📊 Empirical Performance & Benchmarks](#-empirical-performance--benchmarks)
 - [🚀 Single-Flight Request Coalescing](#-single-flight-request-coalescing)
 - [🛡️ Semantic Safety & Anti-Poisoning Evaluation](#️-semantic-safety--anti-poisoning-evaluation)
-- [💰 FinOps Cost Model & Enterprise Projections](#-finops-cost-model--enterprise-projections)
+- [💰 FinOps Cost Model & Projections](#-finops-cost-model--projections)
 - [Quickstart Guide](#-quickstart-guide)
 - [API Reference](#-api-reference)
 - [SDK Compatibility](#-sdk-compatibility)
@@ -38,17 +38,17 @@
 
 ## 🌟 Overview
 
-**CacheMind** is a production-grade, drop-in reverse proxy gateway designed to sit between client applications and large language model (LLM) providers (OpenAI, Anthropic, Ollama, Groq, etc.).
+**CacheMind** is an open-source reverse proxy gateway designed to sit between client applications and large language model (LLM) providers (OpenAI, Anthropic, Ollama, Groq, etc.).
 
-By combining **two-tier deterministic caching** (L1 exact hash + L2 quantized ONNX vector embeddings) with **single-flight request coalescing**, **guardrail anti-poisoning arbitration**, and **financial telemetry**, CacheMind slashes LLM API bills by up to **75–80%** while serving cached inferences in **under 2 milliseconds**.
+By combining **two-tier deterministic caching** (L1 exact hash + L2 quantized ONNX vector embeddings) with **single-flight request coalescing**, **guardrail anti-poisoning arbitration**, and **financial telemetry**, CacheMind eliminates redundant API spend (up to **75.0%** cost avoidance on repetitive workloads) while delivering low-latency cached inferences.
 
 ```
 Client App (OpenAI SDK / LangChain / LlamaIndex)
                      │  (Drop-in replacement via base_url)
                      ▼
           ┌───────────────────────┐
-          │   CacheMind Gateway   │  ──▶  L1 Exact Match (< 2ms)
-          │   (Port 8000)         │  ──▶  L2 Semantic Match (< 8ms)
+          │   CacheMind Gateway   │  ──▶  L1 Exact Hash Match
+          │   (Port 8000)         │  ──▶  L2 Quantized Semantic Vector Match
           └───────────────────────┘
                      │  (Only on Cache Miss)
                      ▼
@@ -61,8 +61,8 @@ Client App (OpenAI SDK / LangChain / LlamaIndex)
 
 | Capability | Description |
 | :--- | :--- |
-| **⚡ Sub-2ms Exact Cache (L1)** | Normalized deterministic SHA-256 fingerprinting with volatile LRU cache backends (Redis / Memory). |
-| **🧠 Sub-8ms Semantic Cache (L2)** | Local CPU-optimized ONNX embeddings (`BAAI/bge-small-en-v1.5`) via FastEmbed; zero PyTorch overhead. |
+| **⚡ L1 Exact Cache** | Normalized deterministic SHA-256 fingerprinting with volatile LRU cache backends (Redis / Memory) — p50 client latency of 8.04 ms ($c=1$). |
+| **🧠 L2 Semantic Cache** | Local CPU-optimized ONNX embeddings (`BAAI/bge-small-en-v1.5`) via FastEmbed — p50 client latency of 21.81 ms ($c=1$). |
 | **🚀 Single-Flight Request Coalescing** | Thundering herd & cache stampede prevention — coalesces $N$ concurrent identical requests into 1 upstream call. |
 | **🛡️ Guardrail Arbiter** | Semantic safety filter preventing cache poisoning across numerical variance, negations, dates, and opposing actions. |
 | **🔒 Ingress PII Sanitization** | Automatic identification and masking/blocking of Credit Cards (Luhn verified), SSNs, Emails, Phone Numbers, and API Keys. |
@@ -96,8 +96,8 @@ Client App (OpenAI SDK / LangChain / LlamaIndex)
                        Exact Hit    /            \ Exact Miss
                                    ▼              ▼
                      [ Return L1 Response ]   [ 5. L2 Semantic Vector Search ]
-                     - Latency: < 2.0ms       (Quantized ONNX Vector Index)
-                     - Upstream Calls: 0                 /          \
+                     - Zero Upstream Calls    (Quantized ONNX Vector Index)
+                                                         /          \
                                             Semantic Hit/            \ Miss
                                                        ▼              ▼
                                            [ 6. Guardrail Check ]  [ 7. Single-Flight Coalescer ]
@@ -120,20 +120,23 @@ Client App (OpenAI SDK / LangChain / LlamaIndex)
 
 > **Full Detailed Benchmark Report:** [`benchmarks/REPORT.md`](benchmarks/REPORT.md)
 
-Empirically measured across standard workloads and load matrices using our scientific benchmark harness (`benchmarks/benchmark_gateway.py`):
+Empirically measured across standard workloads and load matrices using our scientific benchmark harness (`benchmarks/run_full_suite.py`):
 
-### Multi-Tier Latency Percentiles (Milliseconds)
+### Multi-Tier Client Latency Percentiles (1,000 Requests per Scenario, In-Process ASGI Harness)
 
-| Category | p50 (Median) | p90 | p95 | p99 | Mean | Target SLA | Compliance |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **L1 Exact Cache Hit** | **0.85 ms** | **1.20 ms** | **1.45 ms** | **1.92 ms** | **0.91 ms** | **< 2.0 ms** | **PASS (100%)** |
-| **L2 Semantic Hit (ONNX)** | **6.40 ms** | **7.85 ms** | **8.60 ms** | **9.95 ms** | **6.72 ms** | **< 10.0 ms** | **PASS (100%)** |
-| **Internal Gateway Overhead** | **0.22 ms** | **0.38 ms** | **0.45 ms** | **0.62 ms** | **0.26 ms** | **< 1.0 ms** | **PASS (100%)** |
-| **Cache Miss (Upstream Dispatch)**| 31.20 ms | 33.50 ms | 34.80 ms | 36.50 ms | 31.85 ms | Upstream SLA | **PASS** |
+| Category | Concurrency ($c$) | Throughput (RPS) | p50 (Median) | p90 | p95 | p99 | Mean | Hit Rate |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **L1 Exact Cache Hit** | 1 | **107.4** | **8.04 ms** | 13.97 ms | 16.19 ms | 21.14 ms | 9.27 ms | **100.0%** |
+| **L1 Exact Cache Hit** | 10 | **134.9** | **67.26 ms** | 117.84 ms | 136.08 ms | 157.69 ms | 73.66 ms | **100.0%** |
+| **L2 Semantic Hit (FastEmbed ONNX)** | 1 | **46.1** | **21.81 ms** | 30.65 ms | 36.29 ms | 58.20 ms | 21.67 ms | **66.6%** |
+| **L2 Semantic Hit (FastEmbed ONNX)** | 10 | **66.6** | **144.81 ms** | 177.30 ms | 194.92 ms | 221.02 ms | 148.86 ms | **66.6%** |
+| **Cache Miss (35ms Simulated Delay)** | 1 | **12.0** | **79.50 ms** | 100.99 ms | 108.15 ms | 122.04 ms | 83.04 ms | **0.0%** |
+| **Cache Miss (35ms Simulated Delay)** | 10 | **177.1** | **51.81 ms** | 64.93 ms | 70.27 ms | 242.24 ms | 56.12 ms | **0.0%** |
 
-### Startup Lifespan Warmup (ONNX Cold-Start Elimination)
-- **Unwarmed First Request Latency:** `268.45 ms` (JIT initialization overhead)
-- **Pre-Warmed First Request Latency:** `6.45 ms` (**97.6% latency reduction**)
+### Startup Lifespan Warmup (FastEmbed ONNX Graph Pre-warming)
+- **Unwarmed First Request Latency (Recorded Observation):** `481.55 ms` (JIT / ONNX session initialization)
+- **Pre-Warmed First User Request (Recorded Observation):** `12.38 ms` (**97.4% latency reduction**)
+*(Note: Recorded from a single cold vs. pre-warmed execution run.)*
 
 ---
 
@@ -147,7 +150,7 @@ CacheMind prevents **thundering herd / cache stampede** failures during traffic 
 - **Leader Requests Dispatched to Upstream:** **`1`**
 - **Coalesced Followers:** **`49`** (`X-CacheMind-Coalesced: true`)
 - **Upstream API Calls Avoided:** **`98.0%`**
-- **Follower Response Equivalence:** **`100.0%` match**
+- **Coalescing Efficiency:** **`100.0%`**
 
 ```bash
 # Run the single-flight coalescing verification test:
@@ -158,17 +161,19 @@ python -m pytest backend/tests/integration/test_single_flight_coalescing_proof.p
 
 ## 🛡️ Semantic Safety & Anti-Poisoning Evaluation
 
-To prevent semantic cache poisoning (returning outdated or incorrect cached answers to queries with altered numbers, negations, or dates), CacheMind pairs FastEmbed cosine vector search with a deterministic **Guardrail Arbiter**.
+To prevent semantic cache poisoning (returning incorrect cached answers to queries with altered numbers, negations, dates, or opposing actions), CacheMind pairs FastEmbed cosine vector search with a deterministic **Guardrail Arbiter**.
 
 Evaluated against a **610-prompt-pair benchmark** across 6 critical failure categories (`evaluation/semantic_safety/dataset.jsonl`):
 
-| Evaluation Metric | Baseline: Raw Cosine Alone | CacheMind Guardrail Arbiter | Safety Improvement |
+| Evaluation Metric | Baseline: Raw Cosine Alone | CacheMind Guardrail Arbiter | Defense Impact |
 | :--- | :---: | :---: | :---: |
-| **False Positive Rate (FPR)** | **72.80%** | **30.60%** | **-42.20% (Poisoning Prevented)** |
-| **Total Poisoning Attacks Blocked**| 364 cases | 153 cases | **-211 attacks blocked** |
-| **True Negatives (Safe Rejections)**| 136 cases | 347 cases | **+211 safe rejections** |
-| **Valid Paraphrase Recall** | 47.27% | 47.27% | **0.00% (Zero hit degradation)** |
-| **Overall Classification Accuracy**| 30.82% | 65.41% | **+34.59%** |
+| **False Positive Rate (FPR)** | **72.80%** (364 / 500) | **30.60%** (153 / 500) | **-42.2 percentage points (~58.0% relative reduction)** |
+| **Unsafe Semantic Reuse Decisions Avoided** | — | — | **211 unsafe decisions avoided** |
+| **False Positives (Unsafe Cache Hits)** | 364 cases | 153 cases | **-211 cases** |
+| **True Negatives (Safe Rejections)** | 136 cases | 347 cases | **+211 safe rejections** |
+| **Valid Paraphrase Recall** | **47.27%** (52 / 110) | **47.27%** (52 / 110) | **0.00% (Zero valid hit degradation)** |
+| **Precision** | 12.50% | 25.37% | **+12.87 percentage points** |
+| **Overall Classification Accuracy** | 30.82% | 65.41% | **+34.59 percentage points** |
 
 ```bash
 # Run the semantic safety evaluation sweep:
@@ -177,14 +182,16 @@ python evaluation/semantic_safety/evaluate.py --threshold 0.90
 
 ---
 
-## 💰 FinOps Cost Model & Enterprise Projections
+## 💰 FinOps Cost Model & Projections
 
-By caching 75% of repeated and semantically identical queries (40% L1 exact + 35% L2 semantic), CacheMind dramatically reduces API expenditures:
+Modeled projections for GPT-4o ($2.50/1M input, $10.00/1M output, 450 avg input tokens, 250 avg output tokens) with a 75.0% total hit rate (40% L1 exact + 35% L2 semantic), deducting baseline gateway infrastructure ($150/mo + $0.000008/req):
 
-| Monthly Scale Tier | Uncached Spend (GPT-4o) | Spend With CacheMind | Gateway Infrastructure | Net Monthly Savings | Net ROI % |
+| Monthly Request Volume | Uncached Spend (GPT-4o) | Cached Provider Spend | Gateway Infrastructure | Net Monthly Savings | Net ROI % |
 | :---: | :---: | :---: | :---: | :---: | :---: |
 | **100,000 req/mo** | $362.50 | $90.62 | $150.80 | **$121.07** | 80.3% |
+| **500,000 req/mo** | $1,812.50 | $453.12 | $154.00 | **$1,205.38** | 782.7% |
 | **1,000,000 req/mo** | $3,625.00 | $906.25 | $158.00 | **$2,560.75** | **1,620.7%** |
+| **5,000,000 req/mo** | $18,125.00 | $4,531.25 | $190.00 | **$13,403.75** | **7,054.6%** |
 | **10,000,000 req/mo** | $36,250.00 | $9,062.50 | $230.00 | **$26,957.50** | **11,720.6%** |
 | **50,000,000 req/mo** | $181,250.00 | $45,312.50 | $550.00 | **$135,387.50** | **24,615.9%** |
 
@@ -254,7 +261,7 @@ response = client.chat.completions.create(
 )
 print(response.choices[0].message.content)
 
-# 2. Repeated execution (Instant L1 Hit -> < 2ms)
+# 2. Repeated execution (Instant L1 Hit)
 cached_response = client.chat.completions.create(
     model="gpt-4o",
     messages=[{"role": "user", "content": "What are the benefits of semantic caching?"}],
@@ -316,11 +323,9 @@ Supported Sanitization Detectors:
 
 ## 🧪 Test Verification & Quality Assurance
 
-CacheMind features **100% test coverage** across all gateway subsystems.
-
 ```bash
 # Run complete test suite (143 unit & integration tests)
-python -m pytest backend/tests/ -v
+python -m pytest backend/tests/ -q
 
 # Run single-flight request coalescing concurrency proof
 python -m pytest backend/tests/integration/test_single_flight_coalescing_proof.py -v
@@ -330,7 +335,7 @@ python evaluation/semantic_safety/evaluate.py --threshold 0.90
 ```
 
 ```text
-======================= 143 passed in 10.37s =======================
+143 passed in 14.26s
 ```
 
 ---
