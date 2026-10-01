@@ -1,0 +1,22 @@
+{"messages": [{"role": "user", "content": "What is the capital of France?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the capital of France?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Tell me what city serves as the French capital."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How do quantum computers factor large composite integers?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain how RSA public key encryption works."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain how RSA public key encryption works."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Can you explain how RSA public key cryptography operates?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the Raft consensus algorithm and how does leader election work?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Write a Python function to compute the Fibonacci sequence."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Provide a Python script for calculating the Fibonacci sequence."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Write a Rust function to parse JSON with serde."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the difference between synchronous and asynchronous programming?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What distinguishes asynchronous code execution from synchronous programming?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How does vector quantization work in Annoy and HNSW vector databases?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How does TLS 1.3 zero round trip time handshake work?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Describe how zero round trip time resumption works in TLS 1.3 protocol."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is eBPF and how does it enable Linux kernel observability?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain the CAP theorem with distributed database examples."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Describe the CAP theorem trade-offs in distributed data stores."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain Kubernetes pod lifecycle and restart policies."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How do pod lifecycles and restart policies function in K8s?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What are zero knowledge proofs and zk-SNARKs?"}], "model": "gpt-4o", "temperature": 0.0}

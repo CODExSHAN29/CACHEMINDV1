@@ -1,0 +1,50 @@
+{"messages": [{"role": "user", "content": "What is the capital of France?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain how RSA public key encryption works."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Write a Python function to compute the Fibonacci sequence."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the difference between synchronous and asynchronous programming?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How does TLS 1.3 zero round trip time handshake work?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain the CAP theorem with distributed database examples."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What are ACID properties in relational databases?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How do B-trees differ from LSM trees in database storage engines?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the purpose of Docker multi-stage builds?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain Kubernetes pod lifecycle and restart policies."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the capital of France?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain how RSA public key encryption works."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Write a Python function to compute the Fibonacci sequence."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the difference between synchronous and asynchronous programming?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How does TLS 1.3 zero round trip time handshake work?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain the CAP theorem with distributed database examples."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What are ACID properties in relational databases?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How do B-trees differ from LSM trees in database storage engines?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the purpose of Docker multi-stage builds?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain Kubernetes pod lifecycle and restart policies."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the capital of France?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain how RSA public key encryption works."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Write a Python function to compute the Fibonacci sequence."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the difference between synchronous and asynchronous programming?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How does TLS 1.3 zero round trip time handshake work?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain the CAP theorem with distributed database examples."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What are ACID properties in relational databases?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How do B-trees differ from LSM trees in database storage engines?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the purpose of Docker multi-stage builds?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain Kubernetes pod lifecycle and restart policies."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the capital of France?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain how RSA public key encryption works."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Write a Python function to compute the Fibonacci sequence."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the difference between synchronous and asynchronous programming?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How does TLS 1.3 zero round trip time handshake work?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain the CAP theorem with distributed database examples."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What are ACID properties in relational databases?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How do B-trees differ from LSM trees in database storage engines?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the purpose of Docker multi-stage builds?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain Kubernetes pod lifecycle and restart policies."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the capital of France?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain how RSA public key encryption works."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Write a Python function to compute the Fibonacci sequence."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the difference between synchronous and asynchronous programming?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How does TLS 1.3 zero round trip time handshake work?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain the CAP theorem with distributed database examples."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What are ACID properties in relational databases?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How do B-trees differ from LSM trees in database storage engines?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is the purpose of Docker multi-stage builds?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain Kubernetes pod lifecycle and restart policies."}], "model": "gpt-4o", "temperature": 0.0}

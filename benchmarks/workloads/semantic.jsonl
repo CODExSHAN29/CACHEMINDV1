@@ -1,0 +1,25 @@
+{"messages": [{"role": "user", "content": "What is the capital city of France?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Can you explain how RSA public key cryptography operates?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Provide a Python script for calculating the Fibonacci sequence."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What distinguishes asynchronous code execution from synchronous programming?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Describe how zero round trip time resumption works in TLS 1.3 protocol."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Describe the CAP theorem trade-offs in distributed data stores."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What are the four ACID guarantees in SQL databases?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Compare B-tree indexes against log structured merge trees for databases."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Why should developers use multi-stage Docker builds?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How do pod lifecycles and restart policies function in K8s?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Tell me what city serves as the French capital."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How does asymmetric RSA encryption function under the hood?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Write Python code that outputs Fibonacci numbers."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What are the core differences between sync and async execution models?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain 0-RTT session resumption mechanisms in TLS 1.3."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain CAP theorem consistency versus availability trade-offs."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain atomicity, consistency, isolation, and durability in DBMS."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What are the key trade-offs between B-trees and LSM trees in storage?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What advantages do multi-stage Dockerfiles provide for container images?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Explain K8s container restart policy and pod phase transitions."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "What is France's capital city?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How does the RSA public key cryptographic algorithm work?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "Show me an efficient Python algorithm for calculating Fibonacci numbers."}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How does asynchronous programming differ from synchronous code?"}], "model": "gpt-4o", "temperature": 0.0}
+{"messages": [{"role": "user", "content": "How does 0-RTT handshake resumption work in TLS 1.3?"}], "model": "gpt-4o", "temperature": 0.0}

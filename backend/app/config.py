@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     ALLOW_MOCK_PROVIDERS: bool = Field(default=True, description="Allow mock providers in non-production environments")
     ALLOW_MOCK_EMBEDDINGS: bool = Field(default=True, description="Allow mock embeddings in non-production environments")
 
+    # Embedding Engine Warmup
+    EMBEDDING_WARMUP_ENABLED: bool = Field(default=True, description="Run embedding model warmup at startup")
+    EMBEDDING_WARMUP_TEXT: str = Field(default="cachemind embedding warmup", description="Text used for embedding warmup")
+
     # Database
     DATABASE_URL: str = Field(
         default="sqlite+aiosqlite:///./cachemind.db",

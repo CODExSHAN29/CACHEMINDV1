@@ -1,0 +1,78 @@
+{
+  "model": "gpt-4o",
+  "pricing": {
+    "input_per_million_usd": 2.5,
+    "output_per_million_usd": 10.0
+  },
+  "assumptions": {
+    "avg_input_tokens": 450,
+    "avg_output_tokens": 250,
+    "exact_hit_rate_pct": 40.0,
+    "semantic_hit_rate_pct": 35.0,
+    "total_hit_rate_pct": 75.0,
+    "cost_per_uncached_req_usd": 0.003625,
+    "cost_per_cached_req_usd": 0.00090625
+  },
+  "projections": {
+    "100,000 req/mo": {
+      "monthly_requests": 100000,
+      "uncached_cost_usd": 362.5,
+      "cached_cost_usd": 90.62,
+      "infrastructure_cost_usd": 150.8,
+      "gross_savings_usd": 271.88,
+      "net_savings_usd": 121.07,
+      "savings_percentage": 75.0,
+      "roi_percentage": 80.29
+    },
+    "500,000 req/mo": {
+      "monthly_requests": 500000,
+      "uncached_cost_usd": 1812.5,
+      "cached_cost_usd": 453.12,
+      "infrastructure_cost_usd": 154.0,
+      "gross_savings_usd": 1359.38,
+      "net_savings_usd": 1205.38,
+      "savings_percentage": 75.0,
+      "roi_percentage": 782.71
+    },
+    "1,000,000 req/mo": {
+      "monthly_requests": 1000000,
+      "uncached_cost_usd": 3625.0,
+      "cached_cost_usd": 906.25,
+      "infrastructure_cost_usd": 158.0,
+      "gross_savings_usd": 2718.75,
+      "net_savings_usd": 2560.75,
+      "savings_percentage": 75.0,
+      "roi_percentage": 1620.73
+    },
+    "5,000,000 req/mo": {
+      "monthly_requests": 5000000,
+      "uncached_cost_usd": 18125.0,
+      "cached_cost_usd": 4531.25,
+      "infrastructure_cost_usd": 190.0,
+      "gross_savings_usd": 13593.75,
+      "net_savings_usd": 13403.75,
+      "savings_percentage": 75.0,
+      "roi_percentage": 7054.61
+    },
+    "10,000,000 req/mo": {
+      "monthly_requests": 10000000,
+      "uncached_cost_usd": 36250.0,
+      "cached_cost_usd": 9062.5,
+      "infrastructure_cost_usd": 230.0,
+      "gross_savings_usd": 27187.5,
+      "net_savings_usd": 26957.5,
+      "savings_percentage": 75.0,
+      "roi_percentage": 11720.65
+    },
+    "50,000,000 req/mo": {
+      "monthly_requests": 50000000,
+      "uncached_cost_usd": 181250.0,
+      "cached_cost_usd": 45312.5,
+      "infrastructure_cost_usd": 550.0,
+      "gross_savings_usd": 135937.5,
+      "net_savings_usd": 135387.5,
+      "savings_percentage": 75.0,
+      "roi_percentage": 24615.91
+    }
+  }
+}

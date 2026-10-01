@@ -88,6 +88,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_db()
     if settings.ENVIRONMENT == "development":
         await seed_development_fixtures()
+
+    # --- PHASE 1: FastEmbed Startup Warm-Up ---
+    if settings.EMBEDDING_WARMUP_ENABLED:
+        logger.info("Initializing embedding engine warmup...")
+        from backend.semantic.embedding import get_embedding_engine
+        import time
+        start = time.perf_counter()
+        engine = get_embedding_engine()
+        # Warmup happens lazily on first embed() call, but we trigger it here
+        # to remove cold-start from the first user request
+        try:
+            # Emit one deterministic warmup embedding
+            _ = await engine.embed(settings.EMBEDDING_WARMUP_TEXT)
+            duration_ms = (time.perf_counter() - start) * 1000
+            logger.info("Embedding warmup completed in %.2fms", duration_ms)
+        except Exception as e:
+            logger.error("Embedding warmup failed: %s", str(e))
+            # Do not fail startup; first user request will pay cold-start cost
+
     yield
     logger.info("Shutting down CacheMind Gateway...")
     provider = get_provider()
