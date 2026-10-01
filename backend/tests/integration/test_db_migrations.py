@@ -29,9 +29,12 @@ async def test_alembic_migration_lifecycle(tmp_path):
     async with engine.connect() as conn:
         res = await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
         tables = {row[0] for row in res.fetchall()}
+        assert "users" in tables
         assert "tenants" in tables
+        assert "tenant_memberships" in tables
         assert "projects" in tables
         assert "api_keys" in tables
+        assert "sessions" in tables
         assert "request_logs" in tables
         assert "semantic_cache_entries" in tables
         assert "alembic_version" in tables
@@ -42,9 +45,12 @@ async def test_alembic_migration_lifecycle(tmp_path):
     async with engine.connect() as conn:
         res = await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
         tables = {row[0] for row in res.fetchall()}
+        assert "users" not in tables
         assert "tenants" not in tables
+        assert "tenant_memberships" not in tables
         assert "projects" not in tables
         assert "api_keys" not in tables
+        assert "sessions" not in tables
         assert "request_logs" not in tables
         assert "semantic_cache_entries" not in tables
 
