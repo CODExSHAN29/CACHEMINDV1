@@ -22,21 +22,159 @@ function getAdminKey(): string {
   return (typeof window !== "undefined" && localStorage.getItem("cachemind_admin_key")) || DEFAULT_ADMIN_KEY;
 }
 
+function getSessionToken(): string | null {
+  return typeof window !== "undefined" ? localStorage.getItem("cachemind_session_token") : null;
+}
+
 async function req<T>(path: string, options?: RequestInit, admin = false): Promise<T> {
+  const sessionToken = getSessionToken();
+  const key = admin ? getAdminKey() : getApiKey();
+  const authHeader = key ? `Bearer ${key}` : (sessionToken ? `Bearer ${sessionToken}` : undefined);
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
+    credentials: "include",
     headers: {
-      Authorization: `Bearer ${admin ? getAdminKey() : getApiKey()}`,
+      ...(authHeader ? { Authorization: authHeader } : {}),
       ...(options?.body ? { "Content-Type": "application/json" } : {}),
       ...options?.headers,
     },
   });
-  if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "");
+    let errorDetail = `HTTP error ${res.status}`;
+    try {
+      const parsed = JSON.parse(errorText);
+      if (parsed.detail) {
+        errorDetail = typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail);
+      }
+    } catch {}
+    throw new Error(errorDetail);
+  }
   return res.json();
 }
 
 export const api = {
-  // 1. Dashboard & Analytics
+  // 1. Authentication & Workspace Management (/v1/auth/*)
+  async signup(payload: {
+    email: string;
+    password: string;
+    full_name?: string;
+    workspace_name?: string;
+  }): Promise<any> {
+    return req<any>("/v1/auth/signup", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async login(payload: { email: string; password: string }): Promise<any> {
+    return req<any>("/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async logout(): Promise<void> {
+    await req<any>("/v1/auth/logout", { method: "POST" }).catch(() => {});
+  },
+
+  async getMe(): Promise<any> {
+    return req<any>("/v1/auth/me");
+  },
+
+  async listWorkspaces(): Promise<TenantInfo[]> {
+    const data = await req<any>("/v1/auth/workspaces").catch(() => []);
+    return Array.isArray(data) ? data : [];
+  },
+
+  async selectWorkspace(tenantId: string): Promise<any> {
+    return req<any>(`/v1/auth/workspaces/${tenantId}/select`, {
+      method: "POST",
+    });
+  },
+
+  async createWorkspace(name: string): Promise<TenantInfo> {
+    return req<TenantInfo>("/v1/auth/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  async listProjects(tenantId?: string): Promise<ProjectInfo[]> {
+    try {
+      const data = await req<any>("/v1/auth/projects");
+      if (Array.isArray(data)) return data;
+      if (data.projects) return data.projects;
+    } catch {
+      // Fallback to admin projects endpoint if authorized
+      try {
+        const query = tenantId ? `?tenant_id=${tenantId}` : "";
+        const adminData = await req<any>(`/v1/admin/projects${query}`, undefined, true);
+        return Array.isArray(adminData) ? adminData : (adminData.projects || []);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  },
+
+  async createProject(tenantId: string, name: string): Promise<any> {
+    try {
+      return await req<any>("/v1/auth/projects", {
+        method: "POST",
+        body: JSON.stringify({ name, tenant_id: tenantId }),
+      });
+    } catch {
+      return req<ProjectInfo>("/v1/admin/projects", {
+        method: "POST",
+        body: JSON.stringify({ tenant_id: tenantId, name }),
+      }, true);
+    }
+  },
+
+  async listAPIKeys(projectId?: string): Promise<APIKeyInfo[]> {
+    try {
+      const query = projectId ? `?project_id=${projectId}` : "";
+      const data = await req<any>(`/v1/auth/keys${query}`);
+      if (Array.isArray(data)) return data;
+      if (data.api_keys) return data.api_keys;
+    } catch {
+      try {
+        const query = projectId ? `?project_id=${projectId}` : "";
+        const adminData = await req<any>(`/v1/admin/keys${query}`, undefined, true);
+        return Array.isArray(adminData) ? adminData : (adminData.api_keys || []);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  },
+
+  async createAPIKey(projectId: string, name: string, role = "inference"): Promise<any> {
+    try {
+      return await req<any>("/v1/auth/keys", {
+        method: "POST",
+        body: JSON.stringify({ project_id: projectId, name, role }),
+      });
+    } catch {
+      return req<APIKeyInfo>("/v1/admin/keys", {
+        method: "POST",
+        body: JSON.stringify({ project_id: projectId, name, role }),
+      }, true);
+    }
+  },
+
+  async revokeAPIKey(keyId: string): Promise<void> {
+    try {
+      await req<void>(`/v1/auth/keys/${keyId}`, { method: "DELETE" });
+    } catch {
+      await req<void>(`/v1/admin/keys/${keyId}`, { method: "DELETE" }, true);
+    }
+  },
+
+  // 2. Dashboard & Analytics
   async getDashboardSummary(tenantId = "tenant_default"): Promise<DashboardSummary> {
     return req<DashboardSummary>(`/v1/dashboard/summary?tenant_id=${tenantId}`).catch(() => ({
       total_requests: 0,
@@ -57,48 +195,28 @@ export const api = {
     return req<any>(`/v1/analytics/timeseries?days=${days}`).catch(() => ({ data: [] }));
   },
 
-  // 2. Multi-Tenant Admin & Keys
+  // 3. Multi-Tenant Admin & Fallbacks
   async listTenants(): Promise<TenantInfo[]> {
-    const data = await req<any>("/v1/admin/tenants", undefined, true);
-    return Array.isArray(data) ? data : (data.tenants || []);
+    try {
+      return await this.listWorkspaces();
+    } catch {
+      const data = await req<any>("/v1/admin/tenants", undefined, true).catch(() => []);
+      return Array.isArray(data) ? data : (data.tenants || []);
+    }
   },
 
   async createTenant(name: string, tenantId?: string): Promise<TenantInfo> {
-    return req<TenantInfo>("/v1/admin/tenants", {
-      method: "POST",
-      body: JSON.stringify({ name, tenant_id: tenantId }),
-    }, true);
+    try {
+      return await this.createWorkspace(name);
+    } catch {
+      return req<TenantInfo>("/v1/admin/tenants", {
+        method: "POST",
+        body: JSON.stringify({ name, tenant_id: tenantId }),
+      }, true);
+    }
   },
 
-  async listProjects(tenantId = "tenant_default"): Promise<ProjectInfo[]> {
-    const data = await req<any>(`/v1/admin/projects?tenant_id=${tenantId}`, undefined, true);
-    return Array.isArray(data) ? data : (data.projects || []);
-  },
-
-  async createProject(tenantId: string, name: string): Promise<ProjectInfo> {
-    return req<ProjectInfo>("/v1/admin/projects", {
-      method: "POST",
-      body: JSON.stringify({ tenant_id: tenantId, name }),
-    }, true);
-  },
-
-  async listAPIKeys(projectId = "proj_default"): Promise<APIKeyInfo[]> {
-    const data = await req<any>(`/v1/admin/keys?project_id=${projectId}`, undefined, true);
-    return Array.isArray(data) ? data : (data.api_keys || []);
-  },
-
-  async createAPIKey(projectId: string, name: string, role = "inference"): Promise<APIKeyInfo> {
-    return req<APIKeyInfo>("/v1/admin/keys", {
-      method: "POST",
-      body: JSON.stringify({ project_id: projectId, name, role }),
-    }, true);
-  },
-
-  async revokeAPIKey(keyId: string): Promise<void> {
-    await req<void>(`/v1/admin/keys/${keyId}`, { method: "DELETE" }, true);
-  },
-
-  // 3. Cache Management & Invalidation
+  // 4. Cache Management & Invalidation
   async purgeCache(params: {
     tenant_id: string;
     project_id?: string;
@@ -130,7 +248,7 @@ export const api = {
     });
   },
 
-  // 4. Billing & Subscriptions
+  // 5. Billing & Subscriptions
   async listPlans(): Promise<BillingPlan[]> {
     const data = await req<any>("/v1/billing/plans", undefined, true);
     if (Array.isArray(data)) return data;
@@ -150,7 +268,7 @@ export const api = {
     }, true);
   },
 
-  // 5. Interactive Chat / Inference Playground
+  // 6. Interactive Chat / Inference Playground
   async sendPlaygroundInference(
     prompt: string,
     model = "gpt-4o-mini",
@@ -164,6 +282,7 @@ export const api = {
 
     const res = await fetch(`${API_BASE}/v1/chat/completions`, {
       method: "POST",
+      credentials: "include",
       headers: {
         Authorization: `Bearer ${getApiKey()}`,
         "Content-Type": "application/json",

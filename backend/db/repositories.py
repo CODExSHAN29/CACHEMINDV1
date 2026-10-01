@@ -1,10 +1,203 @@
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.db.models import APIKey, Project, RequestLog, Tenant, generate_uuid, utc_now
+from backend.db.models import (
+    APIKey,
+    Project,
+    RequestLog,
+    Session,
+    Tenant,
+    TenantMembership,
+    User,
+    generate_uuid,
+    utc_now,
+)
+
+
+class UserRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create_user(
+        self,
+        email: str,
+        password_hash: str,
+        full_name: Optional[str] = None,
+        is_superuser: bool = False,
+        user_id: Optional[str] = None,
+    ) -> User:
+        user = User(
+            email=email,
+            password_hash=password_hash,
+            full_name=full_name,
+            is_superuser=is_superuser,
+        )
+        if user_id:
+            user.id = user_id
+        self.session.add(user)
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user
+
+    async def get_by_id(self, user_id: str) -> Optional[User]:
+        result = await self.session.execute(
+            select(User)
+            .options(
+                selectinload(User.memberships).selectinload(TenantMembership.tenant).selectinload(Tenant.projects)
+            )
+            .where(User.id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_email(self, email: str) -> Optional[User]:
+        result = await self.session.execute(
+            select(User)
+            .options(
+                selectinload(User.memberships).selectinload(TenantMembership.tenant).selectinload(Tenant.projects)
+            )
+            .where(User.email == email)
+        )
+        return result.scalar_one_or_none()
+
+    async def update_password_hash(self, user_id: str, new_password_hash: str) -> None:
+        await self.session.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(password_hash=new_password_hash, updated_at=utc_now())
+        )
+        await self.session.commit()
+
+    async def list_users(self, limit: int = 100, offset: int = 0) -> list[User]:
+        result = await self.session.execute(
+            select(User).order_by(User.created_at.desc()).limit(limit).offset(offset)
+        )
+        return list(result.scalars().all())
+
+
+class TenantMembershipRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create_membership(
+        self,
+        user_id: str,
+        tenant_id: str,
+        role: str = "member",
+    ) -> TenantMembership:
+        membership = TenantMembership(
+            user_id=user_id,
+            tenant_id=tenant_id,
+            role=role,
+        )
+        self.session.add(membership)
+        await self.session.commit()
+        await self.session.refresh(membership)
+        return membership
+
+    async def get_membership(
+        self, user_id: str, tenant_id: str
+    ) -> Optional[TenantMembership]:
+        result = await self.session.execute(
+            select(TenantMembership)
+            .options(selectinload(TenantMembership.tenant).selectinload(Tenant.projects))
+            .where(
+                TenantMembership.user_id == user_id,
+                TenantMembership.tenant_id == tenant_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_user_memberships(self, user_id: str) -> list[TenantMembership]:
+        result = await self.session.execute(
+            select(TenantMembership)
+            .options(selectinload(TenantMembership.tenant).selectinload(Tenant.projects))
+            .where(TenantMembership.user_id == user_id)
+            .order_by(TenantMembership.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def list_tenant_members(self, tenant_id: str) -> list[TenantMembership]:
+        result = await self.session.execute(
+            select(TenantMembership)
+            .options(selectinload(TenantMembership.user))
+            .where(TenantMembership.tenant_id == tenant_id)
+            .order_by(TenantMembership.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+
+class SessionRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create_session(
+        self,
+        session_token_hash: str,
+        user_id: str,
+        active_tenant_id: Optional[str],
+        expires_at: datetime,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> Session:
+        sess = Session(
+            session_token_hash=session_token_hash,
+            user_id=user_id,
+            active_tenant_id=active_tenant_id,
+            expires_at=expires_at,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        self.session.add(sess)
+        await self.session.commit()
+        await self.session.refresh(sess)
+        return sess
+
+    async def get_by_token_hash(self, session_token_hash: str) -> Optional[Session]:
+        result = await self.session.execute(
+            select(Session)
+            .options(
+                selectinload(Session.user)
+                .selectinload(User.memberships)
+                .selectinload(TenantMembership.tenant)
+                .selectinload(Tenant.projects),
+                selectinload(Session.active_tenant).selectinload(Tenant.projects),
+            )
+            .where(Session.session_token_hash == session_token_hash)
+        )
+        return result.scalar_one_or_none()
+
+    async def update_active_tenant(self, session_id: str, active_tenant_id: str) -> None:
+        await self.session.execute(
+            update(Session)
+            .where(Session.id == session_id)
+            .values(active_tenant_id=active_tenant_id, last_activity_at=utc_now())
+        )
+        await self.session.commit()
+
+    async def touch_session(self, session_id: str) -> None:
+        await self.session.execute(
+            update(Session)
+            .where(Session.id == session_id)
+            .values(last_activity_at=utc_now())
+        )
+        await self.session.commit()
+
+    async def delete_session(self, session_token_hash: str) -> bool:
+        result = await self.session.execute(
+            delete(Session).where(Session.session_token_hash == session_token_hash)
+        )
+        await self.session.commit()
+        return bool(result.rowcount > 0)
+
+    async def delete_user_sessions(self, user_id: str) -> int:
+        result = await self.session.execute(
+            delete(Session).where(Session.user_id == user_id)
+        )
+        await self.session.commit()
+        return result.rowcount or 0
 
 
 class TenantRepository:
@@ -22,13 +215,13 @@ class TenantRepository:
 
     async def get_tenant_by_id(self, tenant_id: str) -> Optional[Tenant]:
         result = await self.session.execute(
-            select(Tenant).where(Tenant.id == tenant_id)
+            select(Tenant).options(selectinload(Tenant.projects)).where(Tenant.id == tenant_id)
         )
         return result.scalar_one_or_none()
 
     async def list_tenants(self, limit: int = 100, offset: int = 0) -> list[Tenant]:
         result = await self.session.execute(
-            select(Tenant).order_by(Tenant.created_at.desc()).limit(limit).offset(offset)
+            select(Tenant).options(selectinload(Tenant.projects)).order_by(Tenant.created_at.desc()).limit(limit).offset(offset)
         )
         return list(result.scalars().all())
 

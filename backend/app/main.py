@@ -8,6 +8,7 @@ from sqlalchemy import select
 from backend.app.config import settings
 from backend.api.v1.admin import router as admin_router
 from backend.api.v1.analytics import router as analytics_router
+from backend.api.v1.auth import router as auth_router
 from backend.api.v1.billing import router as billing_router
 from backend.api.v1.cache_endpoint import router as cache_router
 from backend.api.v1.chat import router as chat_router
@@ -131,16 +132,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware for open SDK / Web integration
+# CORS middleware for secure web dashboard and SDK integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS if settings.ENVIRONMENT == "production" else ["*"],
+    allow_origin_regex=None if settings.ENVIRONMENT == "production" else r"^https?://.*$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include API Routers
+app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(models_router)
 app.include_router(analytics_router)

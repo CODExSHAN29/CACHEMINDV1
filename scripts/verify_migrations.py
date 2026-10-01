@@ -42,9 +42,12 @@ async def verify_schema() -> None:
 
             # 3. Check core application tables exist
             tables_to_check = [
+                "users",
                 "tenants",
+                "tenant_memberships",
                 "projects",
                 "api_keys",
+                "sessions",
                 "request_logs",
                 "semantic_cache_entries",
             ]
