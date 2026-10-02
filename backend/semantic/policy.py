@@ -20,6 +20,7 @@ class SemanticPolicyReason(Enum):
     TOOL_CHOICE_PRESENT = "tool_choice_present"
     STRUCTURED_OUTPUT_SCHEMA = "structured_output_schema"
     MULTIMODAL_CONTENT = "multimodal_content"
+    NON_PLAIN_TEXT_CONTENT = "non_plain_text_content"
     NON_DEFAULT_GENERATION_PARAMS = "non_default_generation_params"
     ATTACHMENTS_PRESENT = "attachments_present"
     NO_USER_MESSAGE = "no_user_message"
@@ -39,8 +40,8 @@ def evaluate_semantic_eligibility(req: NormalizedInferenceRequest) -> SemanticEl
     """Fail-closed evaluation. Returns eligible=True ONLY when request is
     exactly one system message (optional) and exactly one user message,
     with no assistant/tool/function messages, no tool definitions, no
-    structured response_format, no multimodal content parts, and only
-    default generation parameters."""
+    structured response_format, plain string content only (no content arrays/multimodal),
+    and only default/deterministic generation parameters (temperature in {None, 0.0, 1.0}, top_p in {None, 1.0})."""
     messages = req.messages or []
 
     # Must have exactly one user message
@@ -74,6 +75,12 @@ def evaluate_semantic_eligibility(req: NormalizedInferenceRequest) -> SemanticEl
     if len(messages) > 2:
         return SemanticEligibility(False, SemanticPolicyReason.MULTI_TURN_HISTORY)
 
+    # Content check: Every message participating in semantic eligibility (system, user)
+    # MUST be a plain string. Non-string content (lists, dicts, None, objects) fails closed.
+    for m in messages:
+        if not isinstance(m.content, str):
+            return SemanticEligibility(False, SemanticPolicyReason.NON_PLAIN_TEXT_CONTENT)
+
     # No tool/function definitions
     if req.tools is not None and len(req.tools) > 0:
         return SemanticEligibility(False, SemanticPolicyReason.TOOL_DEFINITIONS_PRESENT)
@@ -84,17 +91,8 @@ def evaluate_semantic_eligibility(req: NormalizedInferenceRequest) -> SemanticEl
     if req.response_format is not None:
         return SemanticEligibility(False, SemanticPolicyReason.STRUCTURED_OUTPUT_SCHEMA)
 
-    # No multimodal content parts
-    for m in messages:
-        content = m.content
-        if isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict) and part.get("type") in ("image_url", "image", "file"):
-                    return SemanticEligibility(False, SemanticPolicyReason.MULTIMODAL_CONTENT)
-
     # Only default/deterministic generation parameters permitted for L2 eligibility
-    # Defaults: temperature in (0.0, 1.0) or None, top_p=1.0 or None, max_tokens=None, etc.
-    # Any explicit non-deterministic or restrictive deviation is ineligible.
+    # Allowed temperatures: None, 0.0, 1.0. top_p: None or 1.0. max_tokens/seed/stop/penalties: None/default.
     if req.temperature is not None and not (abs(req.temperature) < 1e-6 or abs(req.temperature - 1.0) < 1e-6):
         return SemanticEligibility(False, SemanticPolicyReason.NON_DEFAULT_GENERATION_PARAMS)
     if req.top_p is not None and abs(req.top_p - 1.0) > 1e-6:

@@ -110,6 +110,7 @@ class CacheWarmer:
                 scope_hash = compute_scope_hash(
                     tenant_id=tenant_id,
                     project_id=project_id,
+                    provider=norm_req.provider,
                     model=norm_req.model,
                     system_prompt=sys_prompt,
                     temperature=norm_req.temperature,

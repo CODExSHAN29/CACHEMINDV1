@@ -225,6 +225,7 @@ async def create_chat_completion(
     scope_hash = compute_scope_hash(
         tenant_id=identity.tenant_id,
         project_id=identity.project_id,
+        provider=norm_req.provider,
         model=norm_req.model,
         system_prompt=system_prompt,
         temperature=norm_req.temperature,

@@ -30,6 +30,7 @@ def compute_exact_request_hash(
 def compute_scope_hash(
     tenant_id: str,
     project_id: str,
+    provider: str,
     model: str,
     system_prompt: Optional[str] = None,
     temperature: Optional[float] = None,
@@ -49,13 +50,14 @@ def compute_scope_hash(
 ) -> str:
     """
     Computes a scope hash partitioning cache namespaces by tenant, project,
-    target model, system prompt, generation parameters, execution contract,
+    provider, target model, system prompt, generation parameters, execution contract,
     namespace, tags, and semantic policy version.
     """
     scope_data: Dict[str, Any] = {
         "policy_version": policy_version,
         "tenant_id": tenant_id,
         "project_id": project_id,
+        "provider": provider,
         "model": model,
         "system_prompt": system_prompt or "",
         "temperature": temperature if temperature is not None else 1.0,

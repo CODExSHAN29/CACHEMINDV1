@@ -1,5 +1,6 @@
 import pytest
 
+from backend.caching.fingerprint import compute_scope_hash, SEMANTIC_POLICY_VERSION
 from backend.normalization.models import (
     NormalizedInferenceRequest,
     NormalizedMessage,
@@ -169,7 +170,7 @@ def test_multimodal_content_rejected():
     )
     result = evaluate_semantic_eligibility(req)
     assert result.eligible is False
-    assert result.reason == SemanticPolicyReason.MULTIMODAL_CONTENT
+    assert result.reason == SemanticPolicyReason.NON_PLAIN_TEXT_CONTENT
 
 
 def test_non_default_temperature_rejected():
@@ -267,3 +268,73 @@ def test_attachment_hashes_rejected():
     result = evaluate_semantic_eligibility(req)
     assert result.eligible is False
     assert result.reason == SemanticPolicyReason.ATTACHMENTS_PRESENT
+
+
+def test_text_array_user_content_rejected():
+    req = NormalizedInferenceRequest(
+        model="gpt-4o",
+        messages=[
+            NormalizedMessage(
+                role="user",
+                content=[{"type": "text", "text": "What is CacheMind?"}],
+            )
+        ],
+    )
+    result = evaluate_semantic_eligibility(req)
+    assert result.eligible is False
+    assert result.reason == SemanticPolicyReason.NON_PLAIN_TEXT_CONTENT
+
+
+def test_text_array_system_content_rejected():
+    req = NormalizedInferenceRequest(
+        model="gpt-4o",
+        messages=[
+            NormalizedMessage(
+                role="system",
+                content=[{"type": "text", "text": "You are a helpful assistant"}],
+            ),
+            NormalizedMessage(role="user", content="Hello"),
+        ],
+    )
+    result = evaluate_semantic_eligibility(req)
+    assert result.eligible is False
+    assert result.reason == SemanticPolicyReason.NON_PLAIN_TEXT_CONTENT
+
+
+def test_provider_scope_isolation():
+    hash_openai = compute_scope_hash(
+        tenant_id="tenant_1",
+        project_id="proj_1",
+        provider="openai",
+        model="gpt-4o-mini",
+        system_prompt="You are helpful",
+        temperature=0.0,
+    )
+    hash_ollama = compute_scope_hash(
+        tenant_id="tenant_1",
+        project_id="proj_1",
+        provider="ollama",
+        model="gpt-4o-mini",
+        system_prompt="You are helpful",
+        temperature=0.0,
+    )
+    assert hash_openai != hash_ollama
+
+
+def test_policy_version_scope_isolation():
+    hash_v1 = compute_scope_hash(
+        tenant_id="tenant_1",
+        project_id="proj_1",
+        provider="openai",
+        model="gpt-4o",
+        policy_version="v1",
+    )
+    hash_v2 = compute_scope_hash(
+        tenant_id="tenant_1",
+        project_id="proj_1",
+        provider="openai",
+        model="gpt-4o",
+        policy_version="v2",
+    )
+    assert hash_v1 != hash_v2
+    assert SEMANTIC_POLICY_VERSION == "v2"
