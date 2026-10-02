@@ -79,24 +79,38 @@ async def get_current_session_and_user(
     active_tenant: Optional[Tenant] = None
     active_membership: Optional[TenantMembership] = None
 
-    if user_session.active_tenant_id and user.memberships:
-        for m in user.memberships:
-            if m.tenant_id == user_session.active_tenant_id:
+    if user_session.active_tenant_id:
+        if user.memberships:
+            for m in user.memberships:
+                if m.tenant_id == user_session.active_tenant_id:
+                    if m.tenant and m.tenant.is_active:
+                        active_membership = m
+                        active_tenant = m.tenant
+                    else:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Selected workspace is inactive or disabled.",
+                            headers={"WWW-Authenticate": "Bearer"},
+                        )
+                    break
+        if not active_tenant:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Selected workspace is inactive or inaccessible.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    else:
+        # Fallback to first active workspace only when session.active_tenant_id is None
+        if user.memberships:
+            for m in user.memberships:
                 if m.tenant and m.tenant.is_active:
                     active_membership = m
                     active_tenant = m.tenant
-                break
-
-    if not active_tenant and user.memberships:
-        for m in user.memberships:
-            if m.tenant and m.tenant.is_active:
-                active_membership = m
-                active_tenant = m.tenant
-                try:
-                    await session_repo.update_active_tenant(user_session.id, active_tenant.id)
-                except Exception:
-                    pass
-                break
+                    try:
+                        await session_repo.update_active_tenant(user_session.id, active_tenant.id)
+                    except Exception:
+                        pass
+                    break
 
     return user, user_session, active_membership, active_tenant
 
@@ -151,8 +165,21 @@ async def get_authenticated_identity(
                             if m.tenant and m.tenant.is_active:
                                 active_tenant = m.tenant
                                 role = m.role
+                            else:
+                                raise HTTPException(
+                                    status_code=status.HTTP_403_FORBIDDEN,
+                                    detail="Selected workspace is inactive or inaccessible.",
+                                    headers={"WWW-Authenticate": "Bearer"},
+                                )
                             break
-                if not active_tenant and user.memberships:
+                    if not active_tenant:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Selected workspace is inactive or inaccessible.",
+                            headers={"WWW-Authenticate": "Bearer"},
+                        )
+                elif user.memberships:
+                    # Uninitialized session: fall back to first active workspace
                     for m in user.memberships:
                         if m.tenant and m.tenant.is_active:
                             active_tenant = m.tenant
@@ -225,8 +252,21 @@ async def get_authenticated_identity(
                         if m.tenant and m.tenant.is_active:
                             active_tenant = m.tenant
                             role = m.role
+                        else:
+                            raise HTTPException(
+                                status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Selected workspace is inactive or inaccessible.",
+                                headers={"WWW-Authenticate": "Bearer"},
+                            )
                         break
-            if not active_tenant and user.memberships:
+                if not active_tenant:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Selected workspace is inactive or inaccessible.",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+            elif user.memberships:
+                # Uninitialized session: fall back to first active workspace
                 for m in user.memberships:
                     if m.tenant and m.tenant.is_active:
                         active_tenant = m.tenant

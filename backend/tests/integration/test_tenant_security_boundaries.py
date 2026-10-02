@@ -339,3 +339,123 @@ async def test_auth_response_omits_session_token(
     login_data = login_res.json()
     assert "session_token" not in login_data
     assert settings.SESSION_COOKIE_NAME in login_res.cookies
+
+
+@pytest.mark.asyncio
+async def test_inactive_selected_tenant_fails_closed_without_switching(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """
+    FAIL-CLOSED SESSION RESOLUTION VERIFICATION:
+    When a session has an explicit active_tenant_id and that tenant becomes inactive,
+    the session MUST fail closed (HTTP 403) instead of silently falling back to
+    another active tenant the user belongs to.
+    """
+    user = User(id="user_multi_tenant", email="multi@cachemind.io", password_hash="dummy", is_active=True)
+    tenant_inactive = Tenant(id="tenant_inact_sel", name="Inactive Primary", is_active=False)
+    tenant_active = Tenant(id="tenant_act_sec", name="Active Secondary", is_active=True)
+    proj_active = Project(id="proj_act_sec", tenant_id=tenant_active.id, name="Active Secondary Project", is_active=True)
+
+    mem_inact = TenantMembership(id="mem_1", user_id=user.id, tenant_id=tenant_inactive.id, role="owner")
+    mem_act = TenantMembership(id="mem_2", user_id=user.id, tenant_id=tenant_active.id, role="owner")
+
+    token = "session_token_multi_tenant_inactive_sel"
+    sess = UserSession(
+        id="sess_multi_inact",
+        session_token_hash=hash_session_token(token),
+        user_id=user.id,
+        active_tenant_id=tenant_inactive.id,
+        expires_at=calculate_session_expiry(),
+    )
+    db_session.add_all([user, tenant_inactive, tenant_active, proj_active, mem_inact, mem_act, sess])
+    await db_session.commit()
+
+    # 1. /v1/chat/completions with cookie must fail closed (403)
+    prompt = {"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}
+    chat_res = await async_client.post(
+        "/v1/chat/completions",
+        cookies={settings.SESSION_COOKIE_NAME: token},
+        json=prompt,
+    )
+    assert chat_res.status_code == 403
+    assert "Selected workspace is inactive or inaccessible." in chat_res.json()["detail"]
+
+    # 2. /v1/auth/me with cookie must fail closed (403)
+    me_res = await async_client.get(
+        "/v1/auth/me",
+        cookies={settings.SESSION_COOKIE_NAME: token},
+    )
+    assert me_res.status_code == 403
+    assert "Selected workspace is inactive or disabled." in me_res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_uninitialized_session_falls_back_to_active_workspace(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """
+    When session.active_tenant_id is None (uninitialized/legacy session),
+    it resolves to the first active workspace membership.
+    """
+    user = User(id="user_uninit_sess", email="uninit@cachemind.io", password_hash="dummy", is_active=True)
+    tenant_active = Tenant(id="tenant_uninit_target", name="Target Workspace", is_active=True)
+    proj_active = Project(id="proj_uninit_target", tenant_id=tenant_active.id, name="Target Project", is_active=True)
+    mem = TenantMembership(id="mem_uninit", user_id=user.id, tenant_id=tenant_active.id, role="owner")
+
+    token = "session_token_uninit_active_tenant"
+    sess = UserSession(
+        id="sess_uninit",
+        session_token_hash=hash_session_token(token),
+        user_id=user.id,
+        active_tenant_id=None,
+        expires_at=calculate_session_expiry(),
+    )
+    db_session.add_all([user, tenant_active, proj_active, mem, sess])
+    await db_session.commit()
+
+    # /v1/auth/me should succeed and resolve Target Workspace
+    me_res = await async_client.get(
+        "/v1/auth/me",
+        cookies={settings.SESSION_COOKIE_NAME: token},
+    )
+    assert me_res.status_code == 200
+    data = me_res.json()
+    assert data["active_tenant"]["id"] == tenant_active.id
+
+
+@pytest.mark.asyncio
+async def test_default_api_key_role_is_inference(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    tenant_a_fixtures: dict,
+):
+    """
+    Verifies that creating an API key without specifying role defaults to 'inference' (least-privilege).
+    """
+    user = User(id="user_key_tester", email="keytest@cachemind.io", password_hash="dummy", is_active=True)
+    tenant = Tenant(id="tenant_key_tester", name="Key Workspace", is_active=True)
+    proj = Project(id="proj_key_tester", tenant_id=tenant.id, name="Key Project", is_active=True)
+    mem = TenantMembership(id="mem_key_tester", user_id=user.id, tenant_id=tenant.id, role="owner")
+
+    token = "session_token_key_tester"
+    sess = UserSession(
+        id="sess_key_tester",
+        session_token_hash=hash_session_token(token),
+        user_id=user.id,
+        active_tenant_id=tenant.id,
+        expires_at=calculate_session_expiry(),
+    )
+    db_session.add_all([user, tenant, proj, mem, sess])
+    await db_session.commit()
+
+    resp = await async_client.post(
+        "/v1/auth/keys",
+        cookies={settings.SESSION_COOKIE_NAME: token},
+        json={"project_id": proj.id, "name": "Least Privilege Key"},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["role"] == "inference"
+
