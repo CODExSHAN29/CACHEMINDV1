@@ -198,6 +198,7 @@ async def create_chat_completion(
 
         headers = {
             "X-CacheMind-Status": "EXACT_HIT",
+            "X-CacheMind-Cache": "EXACT_HIT",
             "X-CacheMind-Request-ID": request_id,
             "X-CacheMind-Exact-Hash": exact_request_hash,
             "X-CacheMind-Gateway-Latency-Ms": f"{gateway_latency_ms:.3f}",
@@ -323,6 +324,7 @@ async def create_chat_completion(
 
                         headers = {
                             "X-CacheMind-Status": "L2_HIT",
+                            "X-CacheMind-Cache": "L2_HIT",
                             "X-CacheMind-Request-ID": request_id,
                             "X-CacheMind-Exact-Hash": exact_request_hash,
                             "X-CacheMind-Similarity": f"{cand.similarity:.4f}",
@@ -374,6 +376,7 @@ async def create_chat_completion(
             )
             headers = {
                 "X-CacheMind-Status": "MISS",
+                "X-CacheMind-Cache": "MISS",
                 "X-CacheMind-Request-ID": request_id,
                 "X-CacheMind-Exact-Hash": exact_request_hash,
                 "X-CacheMind-Lookup-Ms": f"{exact_cache_lookup_ms:.3f}",
@@ -543,6 +546,7 @@ async def create_chat_completion(
 
     headers = {
         "X-CacheMind-Status": "MISS",
+        "X-CacheMind-Cache": "MISS",
         "X-CacheMind-Request-ID": request_id,
         "X-CacheMind-Exact-Hash": exact_request_hash,
         "X-CacheMind-Gateway-Latency-Ms": f"{gateway_latency_ms:.3f}",

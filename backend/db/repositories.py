@@ -141,11 +141,13 @@ class SessionRepository:
         expires_at: datetime,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
+        active_project_id: Optional[str] = None,
     ) -> Session:
         sess = Session(
             session_token_hash=session_token_hash,
             user_id=user_id,
             active_tenant_id=active_tenant_id,
+            active_project_id=active_project_id,
             expires_at=expires_at,
             ip_address=ip_address,
             user_agent=user_agent,
@@ -164,6 +166,7 @@ class SessionRepository:
                 .selectinload(TenantMembership.tenant)
                 .selectinload(Tenant.projects),
                 selectinload(Session.active_tenant).selectinload(Tenant.projects),
+                selectinload(Session.active_project),
             )
             .where(Session.session_token_hash == session_token_hash)
         )
@@ -174,6 +177,14 @@ class SessionRepository:
             update(Session)
             .where(Session.id == session_id)
             .values(active_tenant_id=active_tenant_id, last_activity_at=utc_now())
+        )
+        await self.session.commit()
+
+    async def update_active_project(self, session_id: str, active_project_id: Optional[str]) -> None:
+        await self.session.execute(
+            update(Session)
+            .where(Session.id == session_id)
+            .values(active_project_id=active_project_id, last_activity_at=utc_now())
         )
         await self.session.commit()
 
@@ -267,7 +278,7 @@ class APIKeyRepository:
         key_prefix: str,
         key_hash: str,
         name: str = "Default Key",
-        role: str = "admin",
+        role: str = "inference",
     ) -> APIKey:
         api_key = APIKey(
             project_id=project_id,

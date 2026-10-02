@@ -193,7 +193,18 @@ async def get_authenticated_identity(
                             status_code=status.HTTP_400_BAD_REQUEST,
                             detail="No active projects found in the selected workspace.",
                         )
-                    project = active_projects[0]
+                    project = None
+                    if user_session.active_project_id:
+                        for p in active_projects:
+                            if p.id == user_session.active_project_id:
+                                project = p
+                                break
+                    if not project:
+                        project = active_projects[0]
+                        try:
+                            await session_repo.update_active_project(user_session.id, project.id)
+                        except Exception:
+                            pass
                     is_sysadmin = bool(user.is_superuser)
 
                     return AuthenticatedIdentity(
@@ -280,7 +291,18 @@ async def get_authenticated_identity(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="No active projects found in the selected workspace.",
                     )
-                project = active_projects[0]
+                project = None
+                if user_session.active_project_id:
+                    for p in active_projects:
+                        if p.id == user_session.active_project_id:
+                            project = p
+                            break
+                if not project:
+                    project = active_projects[0]
+                    try:
+                        await session_repo.update_active_project(user_session.id, project.id)
+                    except Exception:
+                        pass
                 is_sysadmin = bool(user.is_superuser)
 
                 return AuthenticatedIdentity(

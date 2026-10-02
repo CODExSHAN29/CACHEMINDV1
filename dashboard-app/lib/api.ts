@@ -13,6 +13,15 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -32,7 +41,7 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
         errorDetail = typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail);
       }
     } catch {}
-    throw new Error(errorDetail);
+    throw new ApiError(errorDetail, res.status);
   }
   return res.json();
 }
@@ -73,6 +82,12 @@ export const api = {
 
   async selectWorkspace(tenantId: string): Promise<any> {
     return req<any>(`/v1/auth/workspaces/${tenantId}/select`, {
+      method: "POST",
+    });
+  },
+
+  async selectProject(projectId: string): Promise<any> {
+    return req<any>(`/v1/auth/projects/${projectId}/select`, {
       method: "POST",
     });
   },

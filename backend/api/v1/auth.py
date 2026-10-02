@@ -53,6 +53,10 @@ class SelectWorkspaceRequest(BaseModel):
     tenant_id: str = Field(..., description="Target tenant/workspace ID")
 
 
+class SelectProjectRequest(BaseModel):
+    project_id: str = Field(..., description="Target project ID")
+
+
 class CreateProjectRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="Project name")
     tenant_id: Optional[str] = Field(None, description="Tenant ID (defaults to active workspace)")
@@ -182,7 +186,22 @@ async def build_auth_session_response(
             projects_resp.append(p_resp)
 
         if projects_resp:
-            active_project_resp = projects_resp[0]
+            if session_obj and session_obj.active_project_id:
+                for p_resp in projects_resp:
+                    if p_resp.id == session_obj.active_project_id and p_resp.is_active:
+                        active_project_resp = p_resp
+                        break
+
+            if not active_project_resp:
+                active_project_resp = projects_resp[0]
+                if session_obj:
+                    session_repo = SessionRepository(db)
+                    try:
+                        await session_repo.update_active_project(session_obj.id, active_project_resp.id)
+                        session_obj.active_project_id = active_project_resp.id
+                    except Exception:
+                        pass
+
             # Fetch API keys for the active project
             api_key_repo = APIKeyRepository(db)
             keys = await api_key_repo.list_keys(active_project_resp.id)
@@ -286,18 +305,7 @@ async def signup(
         name="Default Project",
     )
 
-    # 5. Create Default Cryptographic API Key
-    raw_key, key_prefix, key_hash = generate_api_key()
-    api_key_repo = APIKeyRepository(db)
-    await api_key_repo.create_api_key(
-        project_id=project.id,
-        key_prefix=key_prefix,
-        key_hash=key_hash,
-        name="Default Live Key",
-        role="inference",
-    )
-
-    # 6. Create User Session
+    # 5. Create User Session
     raw_session_token = generate_session_token()
     token_hash = hash_session_token(raw_session_token)
     expires_at = calculate_session_expiry()
@@ -309,19 +317,19 @@ async def signup(
         session_token_hash=token_hash,
         user_id=user.id,
         active_tenant_id=tenant.id,
+        active_project_id=project.id,
         expires_at=expires_at,
         ip_address=client_ip,
         user_agent=user_agent,
     )
 
-    # 7. Set HTTP-only Cookie
+    # 6. Set HTTP-only Cookie
     set_session_cookie(response, raw_session_token)
 
     return await build_auth_session_response(
         user=user,
         session_obj=session_obj,
         db=db,
-        raw_api_key=raw_key,
     )
 
 
@@ -362,10 +370,24 @@ async def login(
         except Exception as exc:
             logger.warning("Failed to rehash password: %s", exc)
 
-    # Resolve active tenant from memberships
+    # Resolve active tenant and active project from memberships
     active_tenant_id: Optional[str] = None
+    active_project_id: Optional[str] = None
     if user.memberships:
-        active_tenant_id = user.memberships[0].tenant_id
+        for m in user.memberships:
+            if m.tenant and m.tenant.is_active:
+                active_tenant_id = m.tenant.id
+                if m.tenant.projects:
+                    active_projects = [p for p in m.tenant.projects if p.is_active]
+                    if active_projects:
+                        active_project_id = active_projects[0].id
+                if not active_project_id:
+                    project_repo = ProjectRepository(db)
+                    tenant_projects = await project_repo.list_projects(active_tenant_id)
+                    active_projects = [p for p in tenant_projects if p.is_active]
+                    if active_projects:
+                        active_project_id = active_projects[0].id
+                break
 
     # Create new session
     raw_session_token = generate_session_token()
@@ -379,6 +401,7 @@ async def login(
         session_token_hash=token_hash,
         user_id=user.id,
         active_tenant_id=active_tenant_id,
+        active_project_id=active_project_id,
         expires_at=expires_at,
         ip_address=client_ip,
         user_agent=user_agent,
@@ -490,18 +513,11 @@ async def create_workspace(
         name="Default Project",
     )
 
-    raw_key, key_prefix, key_hash = generate_api_key()
-    api_key_repo = APIKeyRepository(db)
-    await api_key_repo.create_api_key(
-        project_id=project.id,
-        key_prefix=key_prefix,
-        key_hash=key_hash,
-        name="Default Live Key",
-        role="inference",
-    )
-
     session_repo = SessionRepository(db)
     await session_repo.update_active_tenant(session_obj.id, tenant.id)
+    session_obj.active_tenant_id = tenant.id
+    await session_repo.update_active_project(session_obj.id, project.id)
+    session_obj.active_project_id = project.id
 
     return TenantResponse(
         id=tenant.id,
@@ -541,6 +557,62 @@ async def select_workspace(
     session_repo = SessionRepository(db)
     await session_repo.update_active_tenant(session_obj.id, target_tenant_id)
     session_obj.active_tenant_id = target_tenant_id
+
+    # Reconcile active project to target workspace's first active project
+    project_repo = ProjectRepository(db)
+    target_projects = await project_repo.list_projects(target_tenant_id)
+    active_target_projects = [p for p in target_projects if p.is_active]
+    new_active_project_id = active_target_projects[0].id if active_target_projects else None
+    await session_repo.update_active_project(session_obj.id, new_active_project_id)
+    session_obj.active_project_id = new_active_project_id
+
+    return await build_auth_session_response(
+        user=user,
+        session_obj=session_obj,
+        db=db,
+    )
+
+
+@router.post("/projects/{project_id}/select", response_model=AuthSessionResponse)
+@router.post("/projects/select", response_model=AuthSessionResponse)
+async def select_project(
+    project_id: Optional[str] = None,
+    payload: Optional[SelectProjectRequest] = None,
+    auth_data=Depends(get_current_session_and_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Switches the active project context for the current user session."""
+    target_project_id = project_id or (payload.project_id if payload else None)
+    if not target_project_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Target project_id must be specified.",
+        )
+
+    user, session_obj, active_membership, active_tenant = auth_data
+    project_repo = ProjectRepository(db)
+    project = await project_repo.get_project_by_id(target_project_id)
+    if not project or not project.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found or inactive.",
+        )
+
+    if active_tenant and project.tenant_id != active_tenant.id:
+        membership_repo = TenantMembershipRepository(db)
+        membership = await membership_repo.get_membership(user.id, project.tenant_id)
+        if not membership and not user.is_superuser:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this project.",
+            )
+        session_repo = SessionRepository(db)
+        await session_repo.update_active_tenant(session_obj.id, project.tenant_id)
+        session_obj.active_tenant_id = project.tenant_id
+
+    session_repo = SessionRepository(db)
+    await session_repo.update_active_project(session_obj.id, target_project_id)
+    session_obj.active_project_id = target_project_id
 
     return await build_auth_session_response(
         user=user,
@@ -585,14 +657,14 @@ async def list_projects(
     ]
 
 
-@router.post("/projects", response_model=CreateAPIKeyResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(
     payload: CreateProjectRequest,
     auth_data=Depends(get_current_session_and_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Creates a new project within the active workspace and generates its primary API key."""
-    user, _, active_membership, active_tenant = auth_data
+    """Creates a new project within the active workspace."""
+    user, session_obj, active_membership, active_tenant = auth_data
     target_tenant_id = payload.tenant_id or (active_tenant.id if active_tenant else None)
 
     if not target_tenant_id:
@@ -623,26 +695,17 @@ async def create_project(
         name=project_name,
     )
 
-    # Automatically issue primary API key
-    raw_key, key_prefix, key_hash = generate_api_key()
-    api_key_repo = APIKeyRepository(db)
-    api_key = await api_key_repo.create_api_key(
-        project_id=project.id,
-        key_prefix=key_prefix,
-        key_hash=key_hash,
-        name="Primary Project Key",
-        role="inference",
-    )
+    if session_obj:
+        session_repo = SessionRepository(db)
+        await session_repo.update_active_project(session_obj.id, project.id)
+        session_obj.active_project_id = project.id
 
-    return CreateAPIKeyResponse(
-        id=api_key.id,
-        project_id=api_key.project_id,
-        key_prefix=api_key.key_prefix,
-        name=api_key.name,
-        role=api_key.role,
-        is_active=api_key.is_active,
-        created_at=api_key.created_at,
-        raw_key=raw_key,
+    return ProjectResponse(
+        id=project.id,
+        tenant_id=project.tenant_id,
+        name=project.name,
+        is_active=project.is_active,
+        created_at=project.created_at,
     )
 
 
@@ -653,15 +716,18 @@ async def list_keys(
     db: AsyncSession = Depends(get_db),
 ):
     """Lists API keys for a project in the active workspace."""
-    user, _, _, active_tenant = auth_data
+    user, session_obj, _, active_tenant = auth_data
     if not project_id:
-        if not active_tenant:
+        if session_obj and session_obj.active_project_id:
+            project_id = session_obj.active_project_id
+        elif active_tenant:
+            project_repo = ProjectRepository(db)
+            projects = await project_repo.list_projects(active_tenant.id)
+            active_projects = [p for p in projects if p.is_active]
+            if active_projects:
+                project_id = active_projects[0].id
+        if not project_id:
             return []
-        project_repo = ProjectRepository(db)
-        projects = await project_repo.list_projects(active_tenant.id)
-        if not projects:
-            return []
-        project_id = projects[0].id
 
     project_repo = ProjectRepository(db)
     project = await project_repo.get_project_by_id(project_id)

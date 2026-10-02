@@ -140,6 +140,20 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[
+        "X-CacheMind-Status",
+        "X-CacheMind-Cache",
+        "X-CacheMind-Lookup-Ms",
+        "X-CacheMind-Similarity",
+        "X-CacheMind-Request-Id",
+        "X-CacheMind-Gateway-Latency-Ms",
+        "X-CacheMind-Upstream-Ms",
+        "X-CacheMind-Exact-Hash",
+        "X-CacheMind-Provider",
+        "X-CacheMind-Model",
+        "X-CacheMind-Fallback-Hops",
+        "X-CacheMind-Coalesced",
+    ],
 )
 
 # Include API Routers

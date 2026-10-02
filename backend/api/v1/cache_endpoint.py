@@ -66,11 +66,6 @@ async def inspect_cache_key(
         project_id=identity.project_id,
         exact_request_hash=exact_request_hash,
     )
-    if not inspection.exists:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Cache key {exact_request_hash} not found in project {identity.project_id}",
-        )
     return inspection
 
 

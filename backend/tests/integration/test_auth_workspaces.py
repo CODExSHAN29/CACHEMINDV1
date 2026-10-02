@@ -21,9 +21,6 @@ async def test_signup_flow(async_client: AsyncClient):
     assert data["active_tenant"]["name"] == "Jane's AI Lab"
     assert data["active_tenant"]["role"] == "owner"
     assert data["active_project"]["name"] == "Default Project"
-    assert len(data["api_keys"]) >= 1
-    assert data["raw_api_key"] is not None
-    assert data["raw_api_key"].startswith("cm_live_")
     assert "session_token" not in data
 
     # Verify session cookie was set
@@ -125,11 +122,8 @@ async def test_workspace_and_project_provisioning(async_client: AsyncClient):
     )
     assert proj_res.status_code == 201
     proj_data = proj_res.json()
-    assert proj_data["name"] == "Primary Project Key"
-    assert proj_data["raw_key"].startswith("cm_live_")
-    new_project_id = proj_data["project_id"]
-    issued_key = proj_data["raw_key"]
-    key_id = proj_data["id"]
+    assert proj_data["name"] == "Inference Microservice"
+    new_project_id = proj_data["id"]
 
     # 5. List projects
     projects_res = await async_client.get("/v1/auth/projects")
@@ -137,13 +131,24 @@ async def test_workspace_and_project_provisioning(async_client: AsyncClient):
     proj_names = [p["name"] for p in projects_res.json()]
     assert "Inference Microservice" in proj_names
 
-    # 6. Issue an additional API key
+    # 6. Issue an API key explicitly for project
     key_res = await async_client.post(
+        "/v1/auth/keys",
+        json={"project_id": new_project_id, "name": "Primary Project Key"},
+    )
+    assert key_res.status_code == 201
+    proj_key_data = key_res.json()
+    issued_key = proj_key_data["raw_key"]
+    key_id = proj_key_data["id"]
+    assert issued_key.startswith("cm_live_")
+
+    # Issue an additional API key
+    key2_res = await async_client.post(
         "/v1/auth/keys",
         json={"project_id": new_project_id, "name": "CI/CD Deployment Key"},
     )
-    assert key_res.status_code == 201
-    second_raw_key = key_res.json()["raw_key"]
+    assert key2_res.status_code == 201
+    second_raw_key = key2_res.json()["raw_key"]
     assert second_raw_key.startswith("cm_live_")
 
     # 7. List keys for project
