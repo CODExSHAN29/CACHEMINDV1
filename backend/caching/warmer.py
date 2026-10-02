@@ -9,7 +9,7 @@ from backend.caching.factory import get_cache_backend
 from backend.caching.fingerprint import compute_exact_request_hash, compute_scope_hash, extract_system_prompt
 from backend.caching.models import CachedResponse
 from backend.normalization.models import NormalizedInferenceRequest, NormalizedMessage
-from backend.security.pii import PIISanitizer
+from backend.security.pii import PIIBlockedException, PIISanitizer
 from backend.semantic.factory import get_semantic_cache_service
 from backend.semantic.policy import evaluate_semantic_eligibility
 
@@ -213,6 +213,15 @@ class CacheWarmer:
 
                 exact_hashes.append(exact_hash)
 
+            except PIIBlockedException as exc:
+                failed_count += 1
+                err_msg = f"Item #{idx} failed to warm: PII detected and blocked by policy ({len(exc.entities)} entities)."
+                logger.warning(
+                    "Cache warming item #%d blocked due to PII detection under block policy (%d entities)",
+                    idx,
+                    len(exc.entities),
+                )
+                errors.append(err_msg)
             except Exception as exc:
                 failed_count += 1
                 err_msg = f"Item #{idx} failed to warm: {str(exc)}"

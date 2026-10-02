@@ -1,5 +1,13 @@
 """
 CacheMind Security - Ingress PII & Sensitive Information Sanitizer
+
+Note on Cache Identity & Mask Collisions (Known Limitation):
+When PII masking mode ('mask') is active, distinct user prompts that differ only in sensitive
+entity values (e.g., different email addresses or credit card numbers) will produce identical
+redacted text tokens (e.g., '[REDACTED_EMAIL]'). Consequently, exact and semantic cache keys
+derived from the sanitized request will match across those prompts. This intentional design
+preserves cache reuse for generalized templates without storing or leaking raw PII in cache
+stores or upstream provider logs.
 """
 
 import ipaddress
@@ -31,16 +39,25 @@ def resolve_pii_mode(server_mode: str, requested_mode: str | None = None) -> str
 
     A client may request stricter security (e.g. server mask -> client block),
     but cannot downgrade a stricter server policy (e.g. server block -> client passthrough).
-    Invalid client tokens raise a ValueError.
+    Invalid server or client tokens raise a ValueError.
     """
-    server = (server_mode or "mask").strip().lower()
-    if server not in PII_STRICTNESS_ORDER:
-        server = "mask"
+    if server_mode is None or not str(server_mode).strip():
+        valid_modes = ", ".join(repr(m) for m in PII_STRICTNESS_ORDER.keys())
+        raise ValueError(
+            f"Invalid server PII mode '{server_mode}'. Supported modes: {valid_modes}"
+        )
 
-    if requested_mode is None or not requested_mode.strip():
+    server = str(server_mode).strip().lower()
+    if server not in PII_STRICTNESS_ORDER:
+        valid_modes = ", ".join(repr(m) for m in PII_STRICTNESS_ORDER.keys())
+        raise ValueError(
+            f"Invalid server PII mode '{server_mode}'. Supported modes: {valid_modes}"
+        )
+
+    if requested_mode is None or not str(requested_mode).strip():
         return server
 
-    client = requested_mode.strip().lower()
+    client = str(requested_mode).strip().lower()
     if client not in PII_STRICTNESS_ORDER:
         valid_modes = ", ".join(repr(m) for m in PII_STRICTNESS_ORDER.keys())
         raise ValueError(
@@ -273,8 +290,19 @@ class PIISanitizer:
     ) -> PIISanitizationResult:
         """
         Sanitizes the input text according to the selected mode (mask, block, passthrough).
+        Rejects unrecognized modes with ValueError.
         """
-        active_mode = mode or settings.PII_MASKING_MODE
+        raw_mode = mode or settings.PII_MASKING_MODE
+        if raw_mode is None or not str(raw_mode).strip():
+            active_mode = "mask"
+        else:
+            active_mode = str(raw_mode).strip().lower()
+
+        if active_mode not in PII_STRICTNESS_ORDER:
+            valid_modes = ", ".join(repr(m) for m in PII_STRICTNESS_ORDER.keys())
+            raise ValueError(
+                f"Invalid PII mode '{mode}'. Supported modes: {valid_modes}"
+            )
 
         if active_mode == "passthrough" or not settings.PII_MASKING_ENABLED or not text:
             return PIISanitizationResult(sanitized_text=text, detected_entities=[], has_pii=False)

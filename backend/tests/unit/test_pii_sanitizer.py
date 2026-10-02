@@ -115,6 +115,22 @@ def test_resolve_pii_mode_invalid_client_raises(invalid_mode):
     assert "Supported modes" in str(exc_info.value)
 
 
+@pytest.mark.parametrize("invalid_server_mode", ["", "   ", "invalid", "none", "off", "unknown"])
+def test_resolve_pii_mode_invalid_server_raises(invalid_server_mode):
+    with pytest.raises(ValueError) as exc_info:
+        resolve_pii_mode(invalid_server_mode, "mask")
+    assert "Invalid server PII mode" in str(exc_info.value)
+    assert "Supported modes" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("invalid_mode", ["disable", "off", "0", "none", "invalid", "ALLOW", "bypass"])
+def test_sanitizer_invalid_mode_raises(invalid_mode):
+    with pytest.raises(ValueError) as exc_info:
+        PIISanitizer.sanitize("Hello world", mode=invalid_mode)
+    assert f"Invalid PII mode '{invalid_mode}'" in str(exc_info.value)
+    assert "Supported modes" in str(exc_info.value)
+
+
 def test_structured_content_array_sanitization():
     content = [
         {"type": "text", "text": "Contact me at alice@company.com or phone +1 555-019-2834"},
