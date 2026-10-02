@@ -1,6 +1,7 @@
 from backend.caching.backend import ExactCacheBackend
 from backend.caching.factory import get_cache_backend, set_cache_backend
 from backend.caching.fingerprint import (
+    SEMANTIC_POLICY_VERSION,
     compute_exact_request_hash,
     compute_scope_hash,
     extract_system_prompt,
@@ -19,4 +20,5 @@ __all__ = [
     "compute_exact_request_hash",
     "compute_scope_hash",
     "extract_system_prompt",
+    "SEMANTIC_POLICY_VERSION",
 ]

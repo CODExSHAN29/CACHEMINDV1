@@ -1,8 +1,10 @@
 import hashlib
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from backend.normalization.canonicalizer import canonicalize_request, sha256_json
 from backend.normalization.models import NormalizedInferenceRequest
+
+SEMANTIC_POLICY_VERSION = "v2"
 
 
 def extract_system_prompt(request: NormalizedInferenceRequest) -> Optional[str]:
@@ -32,19 +34,52 @@ def compute_scope_hash(
     system_prompt: Optional[str] = None,
     temperature: Optional[float] = None,
     namespace: Optional[str] = None,
-    tags: Optional[list] = None,
+    tags: Optional[List[str]] = None,
+    top_p: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    max_completion_tokens: Optional[int] = None,
+    presence_penalty: Optional[float] = None,
+    frequency_penalty: Optional[float] = None,
+    seed: Optional[int] = None,
+    stop: Optional[Any] = None,
+    response_format: Optional[Any] = None,
+    tools: Optional[Any] = None,
+    tool_choice: Optional[Any] = None,
+    policy_version: str = SEMANTIC_POLICY_VERSION,
 ) -> str:
     """
     Computes a scope hash partitioning cache namespaces by tenant, project,
-    target model, system prompt, temperature, namespace, and tags.
+    target model, system prompt, generation parameters, execution contract,
+    namespace, tags, and semantic policy version.
     """
-    scope_data = {
+    scope_data: Dict[str, Any] = {
+        "policy_version": policy_version,
         "tenant_id": tenant_id,
         "project_id": project_id,
         "model": model,
         "system_prompt": system_prompt or "",
-        "temperature": temperature if temperature is not None else 0.0,
+        "temperature": temperature if temperature is not None else 1.0,
     }
+    if top_p is not None:
+        scope_data["top_p"] = top_p
+    if max_tokens is not None:
+        scope_data["max_tokens"] = max_tokens
+    if max_completion_tokens is not None:
+        scope_data["max_completion_tokens"] = max_completion_tokens
+    if presence_penalty is not None:
+        scope_data["presence_penalty"] = presence_penalty
+    if frequency_penalty is not None:
+        scope_data["frequency_penalty"] = frequency_penalty
+    if seed is not None:
+        scope_data["seed"] = seed
+    if stop is not None:
+        scope_data["stop"] = stop
+    if response_format is not None:
+        scope_data["response_format"] = response_format
+    if tools is not None:
+        scope_data["tools"] = tools
+    if tool_choice is not None:
+        scope_data["tool_choice"] = tool_choice
     if namespace:
         scope_data["namespace"] = namespace
     if tags:

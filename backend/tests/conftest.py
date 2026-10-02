@@ -102,6 +102,8 @@ def setup_test_singletons():
     from backend.caching.coalescer import RequestCoalescer, set_request_coalescer
     set_request_coalescer(RequestCoalescer())
 
+    settings.SEMANTIC_CACHE_MODE = "safe"
+
     return mem_cache, mock_prov
 
 
