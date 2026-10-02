@@ -74,9 +74,19 @@ class MockProvider(BaseProvider):
 
         last_user_msg = "Hello"
         for m in reversed(request.messages):
-            if m.role == "user" and isinstance(m.content, str):
-                last_user_msg = m.content
-                break
+            if m.role == "user":
+                if isinstance(m.content, str):
+                    last_user_msg = m.content
+                    break
+                elif isinstance(m.content, list):
+                    text_parts = [
+                        p["text"]
+                        for p in m.content
+                        if isinstance(p, dict) and p.get("type") == "text" and isinstance(p.get("text"), str)
+                    ]
+                    if text_parts:
+                        last_user_msg = " ".join(text_parts)
+                        break
 
         reply_content = (
             self.custom_response_text
@@ -140,9 +150,19 @@ class MockProvider(BaseProvider):
 
         last_user_msg = "Hello"
         for m in reversed(request.messages):
-            if m.role == "user" and isinstance(m.content, str):
-                last_user_msg = m.content
-                break
+            if m.role == "user":
+                if isinstance(m.content, str):
+                    last_user_msg = m.content
+                    break
+                elif isinstance(m.content, list):
+                    text_parts = [
+                        p["text"]
+                        for p in m.content
+                        if isinstance(p, dict) and p.get("type") == "text" and isinstance(p.get("text"), str)
+                    ]
+                    if text_parts:
+                        last_user_msg = " ".join(text_parts)
+                        break
 
         reply_content = (
             self.custom_response_text
