@@ -23,24 +23,42 @@ class CachePurgeResult(BaseModel):
     project_id: Optional[str] = None
     purged_l1: int = 0
     purged_l2: int = 0
+    status: str = "ok"
     success: bool = True
     message: str = "Purge completed successfully"
+    purged: bool = True
+    keys_purged: int = 0
+    exact_keys_removed: int = 0
+    semantic_vectors_removed: int = 0
+    model: Optional[str] = None
+    namespace: Optional[str] = None
 
 
 class CacheKeyInspection(BaseModel):
     exact_request_hash: str
+    key_hash: Optional[str] = None
     project_id: str
-    exists: bool
+    exists: bool = False
+    found: bool = False
     provider: Optional[str] = None
     model: Optional[str] = None
     ttl_seconds: Optional[int] = None
+    ttl_remaining_seconds: Optional[int] = None
     hit_count: int = 0
+    access_count: int = 0
     namespace: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     response_preview: Optional[str] = None
+    prompt_preview: Optional[str] = None
     content_preview: Optional[str] = None
+    tokens_saved: Optional[int] = None
     usage: Optional[Dict[str, int]] = None
-    created_at: Optional[float] = None
+    created_at: Optional[Any] = None
+    expires_at: Optional[Any] = None
+    exists_in_l1: bool = False
+    exists_in_l2: bool = False
+    exact_entry: Optional[Dict[str, Any]] = None
+    semantic_entry: Optional[Dict[str, Any]] = None
 
 
 class CacheManagementService:
@@ -136,8 +154,15 @@ class CacheManagementService:
             project_id=project_id,
             purged_l1=purged_l1,
             purged_l2=purged_l2,
+            status="ok",
             success=True,
             message=f"Purged {purged_l1} L1 entries and {purged_l2} L2 semantic entries.",
+            purged=True,
+            keys_purged=purged_l1 + purged_l2,
+            exact_keys_removed=purged_l1,
+            semantic_vectors_removed=purged_l2,
+            model=model,
+            namespace=namespace,
         )
 
     @classmethod
@@ -162,15 +187,24 @@ class CacheManagementService:
                     preview = v_entry.get("input_text") or ""
                     return CacheKeyInspection(
                         exact_request_hash=exact_request_hash,
+                        key_hash=exact_request_hash,
                         project_id=project_id,
                         exists=True,
+                        found=True,
+                        exists_in_l1=False,
+                        exists_in_l2=True,
+                        exact_entry=None,
+                        semantic_entry=v_entry,
                         provider=v_entry.get("provider"),
                         model=v_entry.get("model"),
                         ttl_seconds=v_entry.get("ttl_seconds"),
+                        ttl_remaining_seconds=v_entry.get("ttl_seconds"),
                         hit_count=0,
+                        access_count=0,
                         namespace=v_entry.get("namespace"),
                         tags=v_entry.get("tags") or [],
                         response_preview=preview,
+                        prompt_preview=v_entry.get("input_text"),
                         content_preview=preview,
                         usage=None,
                         created_at=None,
@@ -185,8 +219,15 @@ class CacheManagementService:
 
             return CacheKeyInspection(
                 exact_request_hash=exact_request_hash,
+                key_hash=exact_request_hash,
                 project_id=project_id,
                 exists=False,
+                found=False,
+                exists_in_l1=False,
+                exists_in_l2=False,
+                exact_entry=None,
+                semantic_entry=None,
+                ttl_remaining_seconds=None,
             )
 
         preview = ""
@@ -203,18 +244,37 @@ class CacheManagementService:
                     if content:
                         preview = content[:200] + ("..." if len(content) > 200 else "")
 
+        semantic_service = get_semantic_cache_service()
+        v_entry = None
+        try:
+            v_entry = await semantic_service.backend.inspect_key(exact_request_hash)
+            if v_entry and v_entry.get("project_id") != project_id:
+                v_entry = None
+        except Exception:
+            pass
+
         return CacheKeyInspection(
             exact_request_hash=exact_request_hash,
+            key_hash=exact_request_hash,
             project_id=project_id,
             exists=True,
+            found=True,
+            exists_in_l1=True,
+            exists_in_l2=v_entry is not None,
+            exact_entry=cached.response_payload if cached else None,
+            semantic_entry=v_entry,
             provider=cached.provider,
             model=cached.model,
             ttl_seconds=cached.ttl_seconds,
+            ttl_remaining_seconds=cached.ttl_seconds,
             hit_count=cached.hit_count,
+            access_count=cached.hit_count,
             namespace=cached.namespace,
             tags=cached.tags or [],
             response_preview=preview,
+            prompt_preview=None,
             content_preview=preview,
+            tokens_saved=(cached.response_payload or {}).get("usage", {}).get("total_tokens") if cached.response_payload else None,
             usage=(cached.response_payload or {}).get("usage"),
             created_at=cached.created_at,
         )

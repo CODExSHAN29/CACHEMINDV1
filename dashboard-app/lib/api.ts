@@ -9,9 +9,19 @@ import {
   CacheInspection,
   PurgeResult,
   PlaygroundResponse,
+  AuthSessionResponse,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -32,7 +42,7 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
         errorDetail = typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail);
       }
     } catch {}
-    throw new Error(errorDetail);
+    throw new ApiError(errorDetail, res.status);
   }
   return res.json();
 }
@@ -44,15 +54,15 @@ export const api = {
     password: string;
     full_name?: string;
     workspace_name?: string;
-  }): Promise<any> {
-    return req<any>("/v1/auth/signup", {
+  }): Promise<AuthSessionResponse> {
+    return req<AuthSessionResponse>("/v1/auth/signup", {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
-  async login(payload: { email: string; password: string }): Promise<any> {
-    return req<any>("/v1/auth/login", {
+  async login(payload: { email: string; password: string }): Promise<AuthSessionResponse> {
+    return req<AuthSessionResponse>("/v1/auth/login", {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -62,8 +72,8 @@ export const api = {
     await req<any>("/v1/auth/logout", { method: "POST" }).catch(() => {});
   },
 
-  async getMe(): Promise<any> {
-    return req<any>("/v1/auth/me");
+  async getMe(): Promise<AuthSessionResponse> {
+    return req<AuthSessionResponse>("/v1/auth/me");
   },
 
   async listWorkspaces(): Promise<TenantInfo[]> {
@@ -71,8 +81,14 @@ export const api = {
     return Array.isArray(data) ? data : [];
   },
 
-  async selectWorkspace(tenantId: string): Promise<any> {
-    return req<any>(`/v1/auth/workspaces/${tenantId}/select`, {
+  async selectWorkspace(tenantId: string): Promise<AuthSessionResponse> {
+    return req<AuthSessionResponse>(`/v1/auth/workspaces/${tenantId}/select`, {
+      method: "POST",
+    });
+  },
+
+  async selectProject(projectId: string): Promise<AuthSessionResponse> {
+    return req<AuthSessionResponse>(`/v1/auth/projects/${projectId}/select`, {
       method: "POST",
     });
   },
@@ -248,7 +264,7 @@ export const api = {
     const data = await res.json();
     return {
       ...data,
-      cache_status: res.headers.get("x-cachemind-cache") ?? undefined,
+      cache_status: (res.headers.get("x-cachemind-status") || res.headers.get("x-cachemind-cache")) ?? undefined,
       latency_ms,
       tokens_saved: res.headers.has("x-cachemind-tokens-saved") ? parseInt(res.headers.get("x-cachemind-tokens-saved")!, 10) : undefined,
       cost_saved_usd: res.headers.has("x-cachemind-cost-saved") ? parseFloat(res.headers.get("x-cachemind-cost-saved")!) : undefined,

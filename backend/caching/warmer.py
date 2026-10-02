@@ -47,6 +47,10 @@ class WarmBatchResult(BaseModel):
     failed_count: int = 0
     exact_hashes: List[str] = Field(default_factory=list)
     errors: List[str] = Field(default_factory=list)
+    seeded: int = 0
+    seeded_l1: int = 0
+    seeded_l2: int = 0
+    details: List[Any] = Field(default_factory=list)
 
 
 class CacheWarmer:
@@ -220,4 +224,8 @@ class CacheWarmer:
             failed_count=failed_count,
             exact_hashes=exact_hashes,
             errors=errors,
+            seeded=exact_seeded,
+            seeded_l1=exact_seeded,
+            seeded_l2=semantic_seeded,
+            details=exact_hashes,
         )

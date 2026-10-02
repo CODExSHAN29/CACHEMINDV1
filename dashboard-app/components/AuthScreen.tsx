@@ -1,5 +1,5 @@
 "use client";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -7,10 +7,17 @@ import { Square, ArrowRight } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 const CacheRibbon = dynamic(() => import("./three/CacheRibbon"), { ssr: false });
 export default function AuthScreen({ signupMode = false }: { signupMode?: boolean }) {
-  const { signup, loginWithEmail } = useAuth();
+  const { signup, loginWithEmail, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace("/dashboard");
+    }
+  }, [isAuthenticated, isLoading, router]);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);

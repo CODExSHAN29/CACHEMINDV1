@@ -39,7 +39,7 @@ interface AuthContextType {
   signup: (name: string, email: string, pass: string, org: string, tier?: string) => Promise<boolean>;
   logout: () => Promise<void>;
   switchWorkspace: (workspaceId: string) => Promise<void>;
-  switchProject: (projectId: string) => void;
+  switchProject: (projectId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -80,18 +80,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
         setUser(authUser);
         const wsList = await refreshWorkspaces();
-        const currentWs = wsList.find((w) => w.id === (me.active_tenant?.id || me.active_workspace?.id));
+        const currentWs = wsList.find((w) => w.id === me.active_tenant?.id);
         if (currentWs) setActiveWorkspace(currentWs);
         else if (wsList.length) { setActiveWorkspace(wsList[0]); }
+
+        if (me.active_project) {
+          setActiveProject({
+            id: me.active_project.id,
+            name: me.active_project.name,
+            tenant_id: me.active_project.tenant_id,
+          });
+        }
       } else {
         setUser(null);
         setWorkspaces([]);
         setActiveWorkspace(null);
+        setProjects([]);
+        setActiveProject(null);
       }
-    } catch {
-      setUser(null);
-      setWorkspaces([]);
-      setActiveWorkspace(null);
+    } catch (err: any) {
+      // Auth State Resilience: Only clear state on definitive 401/403 authorization rejections
+      if (
+        err?.status === 401 ||
+        err?.status === 403 ||
+        err?.message?.includes("401") ||
+        err?.message?.includes("403") ||
+        err?.message?.includes("Authentication required") ||
+        err?.message?.includes("Invalid or expired session")
+      ) {
+        setUser(null);
+        setWorkspaces([]);
+        setActiveWorkspace(null);
+        setProjects([]);
+        setActiveProject(null);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -129,8 +151,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
       setUser(loggedUser);
       const wsList = await refreshWorkspaces();
-      const currentWs = wsList.find((w) => w.id === (res.active_tenant?.id || res.active_workspace?.id)) || wsList[0] || null;
+      const currentWs = wsList.find((w) => w.id === res.active_tenant?.id) || wsList[0] || null;
       setActiveWorkspace(currentWs);
+      if (res.active_project) {
+        setActiveProject({
+          id: res.active_project.id,
+          name: res.active_project.name,
+          tenant_id: res.active_project.tenant_id,
+        });
+      }
       return true;
     }
     return false;
@@ -153,6 +182,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const wsList = await refreshWorkspaces();
       const currentWs = wsList.find((w) => w.id === (res.active_tenant?.id)) || wsList[0] || null;
       setActiveWorkspace(currentWs);
+      if (res.active_project) {
+        setActiveProject({
+          id: res.active_project.id,
+          name: res.active_project.name,
+          tenant_id: res.active_project.tenant_id,
+        });
+      }
       return true;
     }
     return false;
@@ -169,25 +205,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const switchWorkspace = async (workspaceId: string) => {
-    try { await api.selectWorkspace(workspaceId); } catch {}
-    const ws = workspaces.find((w) => w.id === workspaceId);
-    if (ws) setActiveWorkspace(ws);
-    setActiveProject(null);
+    const previousWs = activeWorkspace;
+    const previousProjects = projects;
+    const previousProject = activeProject;
     try {
+      const res = await api.selectWorkspace(workspaceId);
+      const ws = workspaces.find((w) => w.id === workspaceId) || (res?.active_tenant ? {
+        id: res.active_tenant.id,
+        name: res.active_tenant.name,
+        role: res.active_tenant.role,
+      } : null);
+      if (ws) setActiveWorkspace(ws);
+
       const list = await api.listProjects(workspaceId);
-      const mapped = (Array.isArray(list) ? list : []).map((p: any) => ({
+      const mapped: ProjectInfo[] = (Array.isArray(list) ? list : []).map((p: any) => ({
         id: p.id || p.project_id,
         name: p.name || "Project",
         tenant_id: p.tenant_id || workspaceId,
       }));
       setProjects(mapped);
-      if (mapped.length) setActiveProject(mapped[0]);
-    } catch {}
+      if (res && res.active_project) {
+        setActiveProject({
+          id: res.active_project.id,
+          name: res.active_project.name,
+          tenant_id: res.active_project.tenant_id,
+        });
+      } else if (mapped.length) {
+        setActiveProject(mapped[0]);
+      } else {
+        setActiveProject(null);
+      }
+    } catch (err) {
+      setActiveWorkspace(previousWs);
+      setProjects(previousProjects);
+      setActiveProject(previousProject);
+      throw err;
+    }
   };
 
-  const switchProject = (projectId: string) => {
-    const proj = projects.find((p) => p.id === projectId);
-    if (proj) setActiveProject(proj);
+  const switchProject = async (projectId: string) => {
+    const previousProject = activeProject;
+    try {
+      const res = await api.selectProject(projectId);
+      if (res && res.active_project) {
+        setActiveProject({
+          id: res.active_project.id,
+          name: res.active_project.name,
+          tenant_id: res.active_project.tenant_id,
+        });
+      }
+    } catch (err) {
+      setActiveProject(previousProject);
+      throw err;
+    }
   };
 
   return (

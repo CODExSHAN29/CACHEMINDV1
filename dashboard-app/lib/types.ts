@@ -125,3 +125,37 @@ export interface ModelMetrics {
   model: string; provider: string; total_requests: number; hit_rate_pct: number;
   cost_saved_usd: number; avg_latency_ms: number;
 }
+
+export interface AuthSessionResponse {
+  user: {
+    id: string;
+    email: string;
+    full_name: string | null;
+    is_active: boolean;
+    is_superuser: boolean;
+    created_at: string;
+  };
+  active_tenant: {
+    id: string;
+    name: string;
+    role: string;
+    is_active: boolean;
+    created_at: string;
+  } | null;
+  active_project: {
+    id: string;
+    tenant_id: string;
+    name: string;
+    is_active: boolean;
+    created_at: string;
+  } | null;
+  workspaces: Array<{
+    id: string;
+    name: string;
+    role: string;
+    is_active: boolean;
+    created_at: string;
+  }>;
+  projects: ProjectInfo[];
+  api_keys: APIKeyInfo[];
+}

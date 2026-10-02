@@ -80,6 +80,7 @@ class Session(Base):
     session_token_hash = Column(String(64), nullable=False, unique=True, index=True)
     user_id = Column(String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     active_tenant_id = Column(String(64), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True)
+    active_project_id = Column(String(64), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     last_activity_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
@@ -88,6 +89,7 @@ class Session(Base):
 
     user = relationship("User", back_populates="sessions")
     active_tenant = relationship("Tenant")
+    active_project = relationship("Project")
 
 
 class Project(Base):
@@ -111,7 +113,7 @@ class APIKey(Base):
     key_prefix = Column(String(32), nullable=False)
     key_hash = Column(String(64), nullable=False, unique=True, index=True)
     name = Column(String(255), nullable=False, default="Default Key")
-    role = Column(String(32), nullable=False, default="admin")
+    role = Column(String(32), nullable=False, default="inference")
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     last_used_at = Column(DateTime(timezone=True), nullable=True)
