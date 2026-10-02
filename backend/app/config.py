@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     DEFAULT_CACHE_TTL_SECONDS: int = 86400  # 24 hours
 
     # Vector Storage Backend (L2 Semantic Cache)
+    SEMANTIC_CACHE_MODE: Literal["exact_only", "safe"] = "exact_only"
     VECTOR_BACKEND: Literal["memory", "pgvector", "qdrant"] = "memory"
     VECTOR_DIMENSION: int = 384
     VECTOR_SIMILARITY_THRESHOLD: float = 0.92

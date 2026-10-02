@@ -11,6 +11,7 @@ from backend.caching.models import CachedResponse
 from backend.normalization.models import NormalizedInferenceRequest
 from backend.metrics.collector import get_metrics_collector
 from backend.semantic.factory import get_semantic_cache_service
+from backend.semantic.policy import evaluate_semantic_eligibility
 from backend.telemetry.service import TelemetryService
 
 logger = logging.getLogger(__name__)
@@ -194,36 +195,38 @@ class StreamAccumulator:
         except Exception as exc:
             logger.error("Failed to backfill L1 cache in stream accumulator: %s", exc)
 
-        # 3. Backfill L2 Semantic Cache
-        if self.last_user_text:
-            try:
-                query_vector = await semantic_service.embedding_engine.embed(self.last_user_text)
-                semantic_payload = dict(raw_response)
-                semantic_payload["__cachemind_input_text__"] = self.last_user_text
-                semantic_payload["__cachemind_system_prompt__"] = self.system_prompt
+        # 3. Backfill L2 Semantic Cache (Opt-in and fail-closed)
+        if settings.SEMANTIC_CACHE_MODE == "safe" and self.last_user_text:
+            eligibility = evaluate_semantic_eligibility(self.norm_req)
+            if eligibility.eligible:
+                try:
+                    query_vector = await semantic_service.embedding_engine.embed(self.last_user_text)
+                    semantic_payload = dict(raw_response)
+                    semantic_payload["__cachemind_input_text__"] = self.last_user_text
+                    semantic_payload["__cachemind_system_prompt__"] = self.system_prompt
 
-                await semantic_service.backend.insert(
-                    scope_hash=self.scope_hash,
-                    exact_request_hash=self.exact_request_hash,
-                    vector=query_vector,
-                    response_payload=semantic_payload,
-                    created_at=time.time(),
-                    input_text=self.last_user_text,
-                    system_prompt=self.system_prompt,
-                    provider=self.provider_used,
-                    model=self.accumulated_model,
-                    ttl_seconds=ttl_seconds,
-                    tenant_id=self.identity.tenant_id,
-                    project_id=self.identity.project_id,
-                    namespace=self.norm_req.namespace,
-                    tags=self.norm_req.tags,
-                )
-            except Exception as exc:
-                logger.error("Failed to backfill L2 semantic cache in stream accumulator: %s", exc)
-                get_metrics_collector().record_error(
-                    error_type="semantic_cache_insert_error",
-                    tenant_id=self.identity.tenant_id,
-                )
+                    await semantic_service.backend.insert(
+                        scope_hash=self.scope_hash,
+                        exact_request_hash=self.exact_request_hash,
+                        vector=query_vector,
+                        response_payload=semantic_payload,
+                        created_at=time.time(),
+                        input_text=self.last_user_text,
+                        system_prompt=self.system_prompt,
+                        provider=self.provider_used,
+                        model=self.accumulated_model,
+                        ttl_seconds=ttl_seconds,
+                        tenant_id=self.identity.tenant_id,
+                        project_id=self.identity.project_id,
+                        namespace=self.norm_req.namespace,
+                        tags=self.norm_req.tags,
+                    )
+                except Exception as exc:
+                    logger.error("Failed to backfill L2 semantic cache in stream accumulator: %s", exc)
+                    get_metrics_collector().record_error(
+                        error_type="semantic_cache_insert_error",
+                        tenant_id=self.identity.tenant_id,
+                    )
 
         # 4. Record Telemetry Log & Prometheus Metrics
         try:

@@ -4,11 +4,13 @@ import uuid
 from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
+from backend.app.config import settings
 from backend.caching.factory import get_cache_backend
 from backend.caching.fingerprint import compute_exact_request_hash, compute_scope_hash, extract_system_prompt
 from backend.caching.models import CachedResponse
 from backend.normalization.models import NormalizedInferenceRequest, NormalizedMessage
 from backend.semantic.factory import get_semantic_cache_service
+from backend.semantic.policy import evaluate_semantic_eligibility
 
 logger = logging.getLogger(__name__)
 
@@ -108,11 +110,22 @@ class CacheWarmer:
                 scope_hash = compute_scope_hash(
                     tenant_id=tenant_id,
                     project_id=project_id,
+                    provider=norm_req.provider,
                     model=norm_req.model,
                     system_prompt=sys_prompt,
                     temperature=norm_req.temperature,
                     namespace=norm_req.namespace,
                     tags=norm_req.tags,
+                    top_p=norm_req.top_p,
+                    max_tokens=norm_req.max_tokens,
+                    max_completion_tokens=norm_req.max_completion_tokens,
+                    presence_penalty=norm_req.presence_penalty,
+                    frequency_penalty=norm_req.frequency_penalty,
+                    seed=norm_req.seed,
+                    stop=norm_req.stop,
+                    response_format=norm_req.response_format,
+                    tools=norm_req.tools,
+                    tool_choice=norm_req.tool_choice,
                 )
 
                 # 3. Build Canonical Response Dict
@@ -162,30 +175,32 @@ class CacheWarmer:
                 )
                 exact_seeded += 1
 
-                # 5. L2 Semantic Cache Insert
-                if last_user_text:
-                    query_vector = await semantic_service.embedding_engine.embed(last_user_text)
-                    semantic_payload = dict(raw_response)
-                    semantic_payload["__cachemind_input_text__"] = last_user_text
-                    semantic_payload["__cachemind_system_prompt__"] = sys_prompt
+                # 5. L2 Semantic Cache Insert (Opt-in and fail-closed)
+                if settings.SEMANTIC_CACHE_MODE == "safe" and last_user_text:
+                    eligibility = evaluate_semantic_eligibility(norm_req)
+                    if eligibility.eligible:
+                        query_vector = await semantic_service.embedding_engine.embed(last_user_text)
+                        semantic_payload = dict(raw_response)
+                        semantic_payload["__cachemind_input_text__"] = last_user_text
+                        semantic_payload["__cachemind_system_prompt__"] = sys_prompt
 
-                    await semantic_service.backend.insert(
-                        scope_hash=scope_hash,
-                        exact_request_hash=exact_hash,
-                        vector=query_vector,
-                        response_payload=semantic_payload,
-                        created_at=time.time(),
-                        input_text=last_user_text,
-                        system_prompt=sys_prompt,
-                        provider=item.provider,
-                        model=item.model,
-                        ttl_seconds=item.ttl_seconds,
-                        tenant_id=tenant_id,
-                        project_id=project_id,
-                        namespace=item.namespace,
-                        tags=item.tags,
-                    )
-                    semantic_seeded += 1
+                        await semantic_service.backend.insert(
+                            scope_hash=scope_hash,
+                            exact_request_hash=exact_hash,
+                            vector=query_vector,
+                            response_payload=semantic_payload,
+                            created_at=time.time(),
+                            input_text=last_user_text,
+                            system_prompt=sys_prompt,
+                            provider=item.provider,
+                            model=item.model,
+                            ttl_seconds=item.ttl_seconds,
+                            tenant_id=tenant_id,
+                            project_id=project_id,
+                            namespace=item.namespace,
+                            tags=item.tags,
+                        )
+                        semantic_seeded += 1
 
                 exact_hashes.append(exact_hash)
 

@@ -23,6 +23,7 @@ from backend.streaming.accumulator import StreamAccumulator
 from backend.streaming.sse import create_cached_stream_generator
 from backend.telemetry.service import TelemetryService
 from backend.semantic.factory import get_semantic_cache_service
+from backend.semantic.policy import evaluate_semantic_eligibility
 
 logger = logging.getLogger(__name__)
 
@@ -218,17 +219,28 @@ async def create_chat_completion(
 
         return JSONResponse(content=response_body, headers=headers)
 
-    # 5. L2 SEMANTIC CACHE LOOKUP
+    # 5. L2 SEMANTIC CACHE LOOKUP (Opt-in and fail-closed)
     semantic_service = get_semantic_cache_service()
     system_prompt = extract_system_prompt(norm_req)
     scope_hash = compute_scope_hash(
         tenant_id=identity.tenant_id,
         project_id=identity.project_id,
+        provider=norm_req.provider,
         model=norm_req.model,
         system_prompt=system_prompt,
         temperature=norm_req.temperature,
         namespace=norm_req.namespace,
         tags=norm_req.tags,
+        top_p=norm_req.top_p,
+        max_tokens=norm_req.max_tokens,
+        max_completion_tokens=norm_req.max_completion_tokens,
+        presence_penalty=norm_req.presence_penalty,
+        frequency_penalty=norm_req.frequency_penalty,
+        seed=norm_req.seed,
+        stop=norm_req.stop,
+        response_format=norm_req.response_format,
+        tools=norm_req.tools,
+        tool_choice=norm_req.tool_choice,
     )
 
     last_user_text = OpenAIAdapter.extract_last_user_message(messages_dicts) or ""
@@ -236,105 +248,107 @@ async def create_chat_completion(
     coalesce_key = f"{identity.tenant_id}:{identity.project_id}:{exact_request_hash}"
 
     query_vector: Optional[list] = None
-    if last_user_text and not coalescer.is_in_flight(coalesce_key):
-        try:
-            query_vector = await semantic_service.embedding_engine.embed(last_user_text)
-            candidates = await semantic_service.backend.search(
-                query_vector=query_vector,
-                scope_hash=scope_hash,
-                top_k=5,
-                similarity_threshold=settings.VECTOR_SIMILARITY_THRESHOLD,
-            )
-
-            for cand in candidates:
-                cand_payload = cand.response_payload
-                cand_text = cand_payload.get("__cachemind_input_text__", "")
-                cand_sys_prompt = cand_payload.get("__cachemind_system_prompt__", None)
-
-                decision = await semantic_service.arbiter.evaluate(
-                    incoming_text=last_user_text,
-                    candidate_text=cand_text or last_user_text,
-                    incoming_system_prompt=system_prompt,
-                    candidate_system_prompt=cand_sys_prompt or system_prompt,
+    if settings.SEMANTIC_CACHE_MODE == "safe" and last_user_text and not coalescer.is_in_flight(coalesce_key):
+        semantic_eligibility = evaluate_semantic_eligibility(norm_req)
+        if semantic_eligibility.eligible:
+            try:
+                query_vector = await semantic_service.embedding_engine.embed(last_user_text)
+                candidates = await semantic_service.backend.search(
+                    query_vector=query_vector,
+                    scope_hash=scope_hash,
+                    top_k=5,
+                    similarity_threshold=settings.VECTOR_SIMILARITY_THRESHOLD,
                 )
 
-                if decision.passed:
-                    # L2 SEMANTIC HIT!
-                    cache_status = "L2_HIT"
-                    upstream_called = False
-                    upstream_latency_ms = None
+                for cand in candidates:
+                    cand_payload = cand.response_payload
+                    cand_text = cand_payload.get("__cachemind_input_text__", "")
+                    cand_sys_prompt = cand_payload.get("__cachemind_system_prompt__", None)
 
-                    cleaned_payload = {k: v for k, v in cand_payload.items() if not k.startswith("__cachemind_")}
-                    response_body = OpenAIAdapter.format_cached_response(
-                        cleaned_payload, request_id, norm_req.model
+                    decision = await semantic_service.arbiter.evaluate(
+                        incoming_text=last_user_text,
+                        candidate_text=cand_text or last_user_text,
+                        incoming_system_prompt=system_prompt,
+                        candidate_system_prompt=cand_sys_prompt or system_prompt,
                     )
 
-                    gateway_latency_ms = (time.perf_counter_ns() - gateway_start_ns) / 1_000_000
-                    usage = response_body.get("usage", {})
-                    input_tokens = usage.get("prompt_tokens")
-                    output_tokens = usage.get("completion_tokens")
+                    if decision.passed:
+                        # L2 SEMANTIC HIT!
+                        cache_status = "L2_HIT"
+                        upstream_called = False
+                        upstream_latency_ms = None
 
-                    await TelemetryService.record_request_log(
-                        db=db,
-                        request_id=request_id,
-                        tenant_id=identity.tenant_id,
-                        project_id=identity.project_id,
-                        provider=norm_req.provider,
-                        requested_model=norm_req.model,
-                        actual_model=response_body.get("model", norm_req.model),
-                        cache_status=cache_status,
-                        exact_request_hash=exact_request_hash,
-                        gateway_latency_ms=gateway_latency_ms,
-                        upstream_latency_ms=upstream_latency_ms,
-                        exact_cache_lookup_ms=exact_cache_lookup_ms,
-                        upstream_called=upstream_called,
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        similarity_score=cand.similarity,
-                        guardrail_status=True,
-                        guardrail_failed_check=None,
-                    )
-
-                    get_metrics_collector().record_request(
-                        tenant_id=identity.tenant_id,
-                        provider=norm_req.provider,
-                        model=norm_req.model,
-                        cache_status="L2_HIT",
-                        gateway_latency_ms=gateway_latency_ms,
-                        upstream_latency_ms=None,
-                        cache_lookup_ms=exact_cache_lookup_ms,
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                    )
-
-                    headers = {
-                        "X-CacheMind-Status": "L2_HIT",
-                        "X-CacheMind-Request-ID": request_id,
-                        "X-CacheMind-Exact-Hash": exact_request_hash,
-                        "X-CacheMind-Similarity": f"{cand.similarity:.4f}",
-                        "X-CacheMind-Gateway-Latency-Ms": f"{gateway_latency_ms:.3f}",
-                        "X-CacheMind-Lookup-Ms": f"{exact_cache_lookup_ms:.3f}",
-                        "X-CacheMind-Provider": cand_payload.get("provider", norm_req.provider),
-                        "X-CacheMind-Model": response_body.get("model", norm_req.model),
-                        "X-CacheMind-Fallback-Hops": "0",
-                        **rl_headers,
-                    }
-
-                    if norm_req.stream:
-                        stream_gen = create_cached_stream_generator(
-                            cached_payload=cleaned_payload,
-                            request_id=request_id,
-                            model=norm_req.model,
+                        cleaned_payload = {k: v for k, v in cand_payload.items() if not k.startswith("__cachemind_")}
+                        response_body = OpenAIAdapter.format_cached_response(
+                            cleaned_payload, request_id, norm_req.model
                         )
-                        return StreamingResponse(stream_gen, media_type="text/event-stream", headers=headers)
 
-                    return JSONResponse(content=response_body, headers=headers)
-        except Exception as exc:
-            logger.warning("L2 semantic cache lookup failed for request %s: %s", request_id, exc)
-            get_metrics_collector().record_error(
-                error_type="semantic_cache_lookup_error",
-                tenant_id=identity.tenant_id,
-            )
+                        gateway_latency_ms = (time.perf_counter_ns() - gateway_start_ns) / 1_000_000
+                        usage = response_body.get("usage", {})
+                        input_tokens = usage.get("prompt_tokens")
+                        output_tokens = usage.get("completion_tokens")
+
+                        await TelemetryService.record_request_log(
+                            db=db,
+                            request_id=request_id,
+                            tenant_id=identity.tenant_id,
+                            project_id=identity.project_id,
+                            provider=norm_req.provider,
+                            requested_model=norm_req.model,
+                            actual_model=response_body.get("model", norm_req.model),
+                            cache_status=cache_status,
+                            exact_request_hash=exact_request_hash,
+                            gateway_latency_ms=gateway_latency_ms,
+                            upstream_latency_ms=upstream_latency_ms,
+                            exact_cache_lookup_ms=exact_cache_lookup_ms,
+                            upstream_called=upstream_called,
+                            input_tokens=input_tokens,
+                            output_tokens=output_tokens,
+                            similarity_score=cand.similarity,
+                            guardrail_status=True,
+                            guardrail_failed_check=None,
+                        )
+
+                        get_metrics_collector().record_request(
+                            tenant_id=identity.tenant_id,
+                            provider=norm_req.provider,
+                            model=norm_req.model,
+                            cache_status="L2_HIT",
+                            gateway_latency_ms=gateway_latency_ms,
+                            upstream_latency_ms=None,
+                            cache_lookup_ms=exact_cache_lookup_ms,
+                            input_tokens=input_tokens,
+                            output_tokens=output_tokens,
+                        )
+
+                        headers = {
+                            "X-CacheMind-Status": "L2_HIT",
+                            "X-CacheMind-Request-ID": request_id,
+                            "X-CacheMind-Exact-Hash": exact_request_hash,
+                            "X-CacheMind-Similarity": f"{cand.similarity:.4f}",
+                            "X-CacheMind-Gateway-Latency-Ms": f"{gateway_latency_ms:.3f}",
+                            "X-CacheMind-Lookup-Ms": f"{exact_cache_lookup_ms:.3f}",
+                            "X-CacheMind-Provider": cand_payload.get("provider", norm_req.provider),
+                            "X-CacheMind-Model": response_body.get("model", norm_req.model),
+                            "X-CacheMind-Fallback-Hops": "0",
+                            **rl_headers,
+                        }
+
+                        if norm_req.stream:
+                            stream_gen = create_cached_stream_generator(
+                                cached_payload=cleaned_payload,
+                                request_id=request_id,
+                                model=norm_req.model,
+                            )
+                            return StreamingResponse(stream_gen, media_type="text/event-stream", headers=headers)
+
+                        return JSONResponse(content=response_body, headers=headers)
+            except Exception as exc:
+                logger.warning("L2 semantic cache lookup failed for request %s: %s", request_id, exc)
+                get_metrics_collector().record_error(
+                    error_type="semantic_cache_lookup_error",
+                    tenant_id=identity.tenant_id,
+                )
 
     # 6. CACHE MISS -> Resilient Routing Engine with Circuit Breakers & Fallbacks
     cache_status = "MISS"
@@ -456,38 +470,40 @@ async def create_chat_completion(
         ttl_seconds,
     )
 
-    # 7b. L2 Semantic Vector Backend Insert
-    if last_user_text:
-        try:
-            if query_vector is None:
-                query_vector = await semantic_service.embedding_engine.embed(last_user_text)
+    # 7b. L2 Semantic Vector Backend Insert (Opt-in and fail-closed)
+    if settings.SEMANTIC_CACHE_MODE == "safe" and last_user_text:
+        eligibility = evaluate_semantic_eligibility(norm_req)
+        if eligibility.eligible:
+            try:
+                if query_vector is None:
+                    query_vector = await semantic_service.embedding_engine.embed(last_user_text)
 
-            semantic_payload = dict(provider_resp.raw_response)
-            semantic_payload["__cachemind_input_text__"] = last_user_text
-            semantic_payload["__cachemind_system_prompt__"] = system_prompt
+                semantic_payload = dict(provider_resp.raw_response)
+                semantic_payload["__cachemind_input_text__"] = last_user_text
+                semantic_payload["__cachemind_system_prompt__"] = system_prompt
 
-            await semantic_service.backend.insert(
-                scope_hash=scope_hash,
-                exact_request_hash=exact_request_hash,
-                vector=query_vector,
-                response_payload=semantic_payload,
-                created_at=time.time(),
-                input_text=last_user_text,
-                system_prompt=system_prompt,
-                provider=routing_result.provider_used,
-                model=provider_resp.model,
-                ttl_seconds=ttl_seconds,
-                tenant_id=identity.tenant_id,
-                project_id=identity.project_id,
-                namespace=norm_req.namespace,
-                tags=norm_req.tags,
-            )
-        except Exception as exc:
-            logger.warning("L2 semantic cache insertion failed for request %s: %s", request_id, exc)
-            get_metrics_collector().record_error(
-                error_type="semantic_cache_insert_error",
-                tenant_id=identity.tenant_id,
-            )
+                await semantic_service.backend.insert(
+                    scope_hash=scope_hash,
+                    exact_request_hash=exact_request_hash,
+                    vector=query_vector,
+                    response_payload=semantic_payload,
+                    created_at=time.time(),
+                    input_text=last_user_text,
+                    system_prompt=system_prompt,
+                    provider=routing_result.provider_used,
+                    model=provider_resp.model,
+                    ttl_seconds=ttl_seconds,
+                    tenant_id=identity.tenant_id,
+                    project_id=identity.project_id,
+                    namespace=norm_req.namespace,
+                    tags=norm_req.tags,
+                )
+            except Exception as exc:
+                logger.warning("L2 semantic cache insertion failed for request %s: %s", request_id, exc)
+                get_metrics_collector().record_error(
+                    error_type="semantic_cache_insert_error",
+                    tenant_id=identity.tenant_id,
+                )
 
     gateway_latency_ms = (time.perf_counter_ns() - gateway_start_ns) / 1_000_000
 
