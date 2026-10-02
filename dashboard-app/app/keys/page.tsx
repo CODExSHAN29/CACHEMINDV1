@@ -25,7 +25,7 @@ export default function KeysPage() {
     const requestScope = scope;
     setBusy(true); setError(""); setCopied(false);
     try {
-      const result = await api.createAPIKey(activeProject.id, name.trim(), "admin");
+      const result = await api.createAPIKey(activeProject.id, name.trim(), "inference");
       if (current.current !== requestScope) return;
       if (!result.raw_key) throw new Error("The gateway did not return a credential.");
       setRawKey(result.raw_key); setName(""); setRefresh(v => v + 1);

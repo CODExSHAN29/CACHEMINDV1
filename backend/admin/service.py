@@ -125,7 +125,7 @@ class AdminService:
                 project_id=k.project_id,
                 key_prefix=k.key_prefix,
                 name=k.name,
-                role=getattr(k, "role", "admin") or "admin",
+                role=getattr(k, "role", "inference") or "inference",
                 is_active=k.is_active,
                 created_at=k.created_at,
                 last_used_at=k.last_used_at,

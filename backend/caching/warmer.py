@@ -18,6 +18,7 @@ class WarmItem(BaseModel):
         ...,
         description="Prompt string or list of OpenAI message dicts ({'role': 'user', 'content': '...'})"
     )
+    completion: Optional[str] = Field(default=None, description="Alias for response text")
     response: Optional[str] = Field(default=None, description="The authoritative pre-computed completion text")
     model: str = Field(default="gpt-4o", description="Target model name")
     provider: str = Field(default="openai", description="Target provider name")
@@ -30,6 +31,7 @@ class WarmItem(BaseModel):
 
 class WarmBatchRequest(BaseModel):
     items: List[WarmItem] = Field(..., description="List of pre-warming prompt-response pairs")
+    tenant_id: Optional[str] = Field(default=None, description="Target tenant ID (admin-only override)")
     project_id: Optional[str] = Field(default=None, description="Target project ID (defaults to authenticated project)")
 
 
@@ -114,7 +116,7 @@ class CacheWarmer:
                 )
 
                 # 3. Build Canonical Response Dict
-                resolved_content = item.response or getattr(item, "response_text", "") or ""
+                resolved_content = item.response or getattr(item, "completion", None) or getattr(item, "response_text", "") or ""
                 in_tokens = max(1, len(last_user_text) // 4 + 4)
                 out_tokens = max(1, len(resolved_content) // 4 + 1)
                 req_id = f"cm-warm-{uuid.uuid4().hex[:12]}"

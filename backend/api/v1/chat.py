@@ -122,6 +122,13 @@ async def create_chat_completion(
             headers=rl_headers,
         )
 
+    # Inference permission check
+    if not identity.can_infer:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="API key role does not permit inference operations.",
+        )
+
     # 3. Derive Exact Hash (Strictly bound to authenticated tenant & project)
     exact_request_hash = compute_exact_request_hash(
         identity.tenant_id, identity.project_id, norm_req
