@@ -32,7 +32,7 @@ class ProjectResponse(BaseModel):
 class APIKeyCreateRequest(BaseModel):
     project_id: str = Field(..., description="Parent project ID")
     name: str = Field(default="Live API Key", min_length=1, max_length=255)
-    role: str = Field(default="admin", description="Role scope: admin, inference, read_only")
+    role: str = Field(default="inference", description="Role scope: inference, read_only, cache_write, admin")
 
 
 class APIKeyResponse(BaseModel):

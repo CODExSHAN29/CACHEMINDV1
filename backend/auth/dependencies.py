@@ -82,17 +82,21 @@ async def get_current_session_and_user(
     if user_session.active_tenant_id and user.memberships:
         for m in user.memberships:
             if m.tenant_id == user_session.active_tenant_id:
-                active_membership = m
-                active_tenant = m.tenant
+                if m.tenant and m.tenant.is_active:
+                    active_membership = m
+                    active_tenant = m.tenant
                 break
 
     if not active_tenant and user.memberships:
-        active_membership = user.memberships[0]
-        active_tenant = active_membership.tenant
-        try:
-            await session_repo.update_active_tenant(user_session.id, active_tenant.id)
-        except Exception:
-            pass
+        for m in user.memberships:
+            if m.tenant and m.tenant.is_active:
+                active_membership = m
+                active_tenant = m.tenant
+                try:
+                    await session_repo.update_active_tenant(user_session.id, active_tenant.id)
+                except Exception:
+                    pass
+                break
 
     return user, user_session, active_membership, active_tenant
 
@@ -144,26 +148,37 @@ async def get_authenticated_identity(
                 if user_session.active_tenant_id and user.memberships:
                     for m in user.memberships:
                         if m.tenant_id == user_session.active_tenant_id:
+                            if m.tenant and m.tenant.is_active:
+                                active_tenant = m.tenant
+                                role = m.role
+                            break
+                if not active_tenant and user.memberships:
+                    for m in user.memberships:
+                        if m.tenant and m.tenant.is_active:
                             active_tenant = m.tenant
                             role = m.role
                             break
-                if not active_tenant and user.memberships:
-                    active_tenant = user.memberships[0].tenant
-                    role = user.memberships[0].role
 
                 if active_tenant:
-                    project = active_tenant.projects[0] if active_tenant.projects else None
-                    project_id = project.id if project else f"{active_tenant.id}_default"
-                    project_name = project.name if project else "Default Project"
+                    active_projects = [p for p in (active_tenant.projects or []) if p.is_active]
+                    if not active_projects:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="No active projects found in the selected workspace.",
+                        )
+                    project = active_projects[0]
+                    is_sysadmin = bool(user.is_superuser)
 
                     return AuthenticatedIdentity(
                         tenant_id=active_tenant.id,
-                        project_id=project_id,
+                        project_id=project.id,
                         api_key_id="session_cookie_auth",
                         tenant_name=active_tenant.name,
-                        project_name=project_name,
+                        project_name=project.name,
                         key_prefix="cm_sess",
-                        role=role if role in ("owner", "admin") else ("admin" if user.is_superuser else "member"),
+                        role=role if role in ("owner", "admin") else ("admin" if is_sysadmin else "member"),
+                        authority_type="session_user",
+                        is_system_admin=is_sysadmin,
                     )
 
         raise HTTPException(
@@ -181,7 +196,9 @@ async def get_authenticated_identity(
             tenant_name="CacheMind System Admin",
             project_name="Admin Control Plane",
             key_prefix="cm_admin",
-            role="admin",
+            role="system_admin",
+            authority_type="system_admin",
+            is_system_admin=True,
         )
 
     key_hash = hash_api_key(raw_key)
@@ -195,7 +212,7 @@ async def get_authenticated_identity(
         user_session = await session_repo.get_by_token_hash(token_hash)
         if (
             user_session
-            and user_session.expires_at > datetime.now(timezone.utc)
+            and not is_session_expired(user_session.expires_at)
             and user_session.user
             and user_session.user.is_active
         ):
@@ -205,26 +222,37 @@ async def get_authenticated_identity(
             if user_session.active_tenant_id and user.memberships:
                 for m in user.memberships:
                     if m.tenant_id == user_session.active_tenant_id:
+                        if m.tenant and m.tenant.is_active:
+                            active_tenant = m.tenant
+                            role = m.role
+                        break
+            if not active_tenant and user.memberships:
+                for m in user.memberships:
+                    if m.tenant and m.tenant.is_active:
                         active_tenant = m.tenant
                         role = m.role
                         break
-            if not active_tenant and user.memberships:
-                active_tenant = user.memberships[0].tenant
-                role = user.memberships[0].role
 
             if active_tenant:
-                project = active_tenant.projects[0] if active_tenant.projects else None
-                project_id = project.id if project else f"{active_tenant.id}_default"
-                project_name = project.name if project else "Default Project"
+                active_projects = [p for p in (active_tenant.projects or []) if p.is_active]
+                if not active_projects:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="No active projects found in the selected workspace.",
+                    )
+                project = active_projects[0]
+                is_sysadmin = bool(user.is_superuser)
 
                 return AuthenticatedIdentity(
                     tenant_id=active_tenant.id,
-                    project_id=project_id,
+                    project_id=project.id,
                     api_key_id="session_bearer_auth",
                     tenant_name=active_tenant.name,
-                    project_name=project_name,
+                    project_name=project.name,
                     key_prefix="cm_sess",
-                    role=role if role in ("owner", "admin") else ("admin" if user.is_superuser else "member"),
+                    role=role if role in ("owner", "admin") else ("admin" if is_sysadmin else "member"),
+                    authority_type="session_user",
+                    is_system_admin=is_sysadmin,
                 )
 
         raise HTTPException(
@@ -270,7 +298,9 @@ async def get_authenticated_identity(
         tenant_name=tenant.name,
         project_name=project.name,
         key_prefix=api_key.key_prefix,
-        role=getattr(api_key, "role", "admin") or "admin",
+        role=getattr(api_key, "role", "inference") or "inference",
+        authority_type="project_key",
+        is_system_admin=False,
     )
 
 
@@ -278,11 +308,11 @@ async def get_admin_identity(
     identity: AuthenticatedIdentity = Depends(get_authenticated_identity),
 ) -> AuthenticatedIdentity:
     """
-    Enforces that caller has admin role for administrative and provisioning operations.
+    Enforces that caller has system administration privileges for cluster-level operations.
     """
-    if not identity.is_admin:
+    if not identity.can_system_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin privileges required for this endpoint.",
+            detail="System administration privileges required.",
         )
     return identity

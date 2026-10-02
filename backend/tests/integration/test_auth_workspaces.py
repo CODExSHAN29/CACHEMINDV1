@@ -24,7 +24,7 @@ async def test_signup_flow(async_client: AsyncClient):
     assert len(data["api_keys"]) >= 1
     assert data["raw_api_key"] is not None
     assert data["raw_api_key"].startswith("cm_live_")
-    assert data["session_token"] is not None
+    assert "session_token" not in data
 
     # Verify session cookie was set
     assert settings.SESSION_COOKIE_NAME in res.cookies

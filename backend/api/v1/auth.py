@@ -61,7 +61,7 @@ class CreateProjectRequest(BaseModel):
 class CreateAPIKeyRequest(BaseModel):
     project_id: str = Field(..., description="Target project ID")
     name: Optional[str] = Field("Default Key", description="Display name for key")
-    role: Optional[str] = Field("admin", description="Role (admin or member)")
+    role: Optional[str] = Field("inference", description="Role (inference, read_only, cache_write, admin)")
 
 
 class UserResponse(BaseModel):
@@ -112,7 +112,6 @@ class AuthSessionResponse(BaseModel):
     projects: List[ProjectResponse] = []
     api_keys: List[APIKeyResponse] = []
     raw_api_key: Optional[str] = None
-    session_token: Optional[str] = None
 
 
 # --- Helpers ---
@@ -122,7 +121,6 @@ async def build_auth_session_response(
     session_obj: Optional[Session],
     db: AsyncSession,
     raw_api_key: Optional[str] = None,
-    raw_session_token: Optional[str] = None,
 ) -> AuthSessionResponse:
     """Builds a complete workspace and session view for the authenticated user."""
     user_repo = UserRepository(db)
@@ -219,7 +217,6 @@ async def build_auth_session_response(
         projects=projects_resp,
         api_keys=api_keys_resp,
         raw_api_key=raw_api_key,
-        session_token=raw_session_token,
     )
 
 
@@ -297,7 +294,7 @@ async def signup(
         key_prefix=key_prefix,
         key_hash=key_hash,
         name="Default Live Key",
-        role="admin",
+        role="inference",
     )
 
     # 6. Create User Session
@@ -325,7 +322,6 @@ async def signup(
         session_obj=session_obj,
         db=db,
         raw_api_key=raw_key,
-        raw_session_token=raw_session_token,
     )
 
 
@@ -395,7 +391,6 @@ async def login(
         user=user,
         session_obj=session_obj,
         db=db,
-        raw_session_token=raw_session_token,
     )
 
 
@@ -502,7 +497,7 @@ async def create_workspace(
         key_prefix=key_prefix,
         key_hash=key_hash,
         name="Default Live Key",
-        role="admin",
+        role="inference",
     )
 
     session_repo = SessionRepository(db)
@@ -636,7 +631,7 @@ async def create_project(
         key_prefix=key_prefix,
         key_hash=key_hash,
         name="Primary Project Key",
-        role="admin",
+        role="inference",
     )
 
     return CreateAPIKeyResponse(
@@ -726,6 +721,14 @@ async def create_key(
                 detail="Admin or owner privileges required to create API keys.",
             )
 
+    permitted_roles = {"inference", "read_only", "cache_write", "admin"}
+    role = (payload.role or "inference").strip().lower()
+    if role not in permitted_roles:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid key role '{role}'. Permitted roles: {', '.join(sorted(permitted_roles))}",
+        )
+
     raw_key, key_prefix, key_hash = generate_api_key()
     api_key_repo = APIKeyRepository(db)
     api_key = await api_key_repo.create_api_key(
@@ -733,7 +736,7 @@ async def create_key(
         key_prefix=key_prefix,
         key_hash=key_hash,
         name=payload.name or "API Key",
-        role=payload.role or "admin",
+        role=role,
     )
 
     return CreateAPIKeyResponse(
