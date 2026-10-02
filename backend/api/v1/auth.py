@@ -115,7 +115,6 @@ class AuthSessionResponse(BaseModel):
     workspaces: List[TenantResponse] = []
     projects: List[ProjectResponse] = []
     api_keys: List[APIKeyResponse] = []
-    raw_api_key: Optional[str] = None
 
 
 # --- Helpers ---
@@ -124,7 +123,6 @@ async def build_auth_session_response(
     user: User,
     session_obj: Optional[Session],
     db: AsyncSession,
-    raw_api_key: Optional[str] = None,
 ) -> AuthSessionResponse:
     """Builds a complete workspace and session view for the authenticated user."""
     user_repo = UserRepository(db)
@@ -191,10 +189,11 @@ async def build_auth_session_response(
                     if p_resp.id == session_obj.active_project_id and p_resp.is_active:
                         active_project_resp = p_resp
                         break
-
-            if not active_project_resp:
-                active_project_resp = projects_resp[0]
-                if session_obj:
+            elif session_obj and session_obj.active_project_id is None:
+                # Uninitialized session: fallback to first active project
+                active_projects = [p for p in projects_resp if p.is_active]
+                if active_projects:
+                    active_project_resp = active_projects[0]
                     session_repo = SessionRepository(db)
                     try:
                         await session_repo.update_active_project(session_obj.id, active_project_resp.id)
@@ -202,22 +201,23 @@ async def build_auth_session_response(
                     except Exception:
                         pass
 
-            # Fetch API keys for the active project
-            api_key_repo = APIKeyRepository(db)
-            keys = await api_key_repo.list_keys(active_project_resp.id)
-            for k in keys:
-                api_keys_resp.append(
-                    APIKeyResponse(
-                        id=k.id,
-                        project_id=k.project_id,
-                        key_prefix=k.key_prefix,
-                        name=k.name,
-                        role=k.role,
-                        is_active=k.is_active,
-                        created_at=k.created_at,
-                        last_used_at=k.last_used_at,
+            # Fetch API keys for the active project only if active_project_resp resolved
+            if active_project_resp:
+                api_key_repo = APIKeyRepository(db)
+                keys = await api_key_repo.list_keys(active_project_resp.id)
+                for k in keys:
+                    api_keys_resp.append(
+                        APIKeyResponse(
+                            id=k.id,
+                            project_id=k.project_id,
+                            key_prefix=k.key_prefix,
+                            name=k.name,
+                            role=k.role,
+                            is_active=k.is_active,
+                            created_at=k.created_at,
+                            last_used_at=k.last_used_at,
+                        )
                     )
-                )
 
     user_resp = UserResponse(
         id=loaded_user.id,
@@ -235,7 +235,6 @@ async def build_auth_session_response(
         workspaces=workspaces,
         projects=projects_resp,
         api_keys=api_keys_resp,
-        raw_api_key=raw_api_key,
     )
 
 
@@ -249,7 +248,7 @@ async def signup(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Registers a new user, provisions a default workspace and project, generates an initial API key,
+    Registers a new user, provisions a default workspace and project,
     and sets a secure HTTP-only session cookie.
     """
     clean_email = normalize_email(payload.email)
@@ -581,7 +580,7 @@ async def select_project(
     auth_data=Depends(get_current_session_and_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Switches the active project context for the current user session."""
+    """Switches the active project context for the current user session within the active workspace."""
     target_project_id = project_id or (payload.project_id if payload else None)
     if not target_project_id:
         raise HTTPException(
@@ -598,17 +597,11 @@ async def select_project(
             detail="Project not found or inactive.",
         )
 
-    if active_tenant and project.tenant_id != active_tenant.id:
-        membership_repo = TenantMembershipRepository(db)
-        membership = await membership_repo.get_membership(user.id, project.tenant_id)
-        if not membership and not user.is_superuser:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have access to this project.",
-            )
-        session_repo = SessionRepository(db)
-        await session_repo.update_active_tenant(session_obj.id, project.tenant_id)
-        session_obj.active_tenant_id = project.tenant_id
+    if not active_tenant or project.tenant_id != active_tenant.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot select a project outside the active workspace.",
+        )
 
     session_repo = SessionRepository(db)
     await session_repo.update_active_project(session_obj.id, target_project_id)

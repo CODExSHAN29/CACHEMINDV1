@@ -199,7 +199,13 @@ async def get_authenticated_identity(
                             if p.id == user_session.active_project_id:
                                 project = p
                                 break
-                    if not project:
+                        if not project:
+                            raise HTTPException(
+                                status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Selected project is inactive or inaccessible.",
+                                headers={"WWW-Authenticate": "Bearer"},
+                            )
+                    else:
                         project = active_projects[0]
                         try:
                             await session_repo.update_active_project(user_session.id, project.id)
@@ -297,7 +303,13 @@ async def get_authenticated_identity(
                         if p.id == user_session.active_project_id:
                             project = p
                             break
-                if not project:
+                    if not project:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Selected project is inactive or inaccessible.",
+                            headers={"WWW-Authenticate": "Bearer"},
+                        )
+                else:
                     project = active_projects[0]
                     try:
                         await session_repo.update_active_project(user_session.id, project.id)

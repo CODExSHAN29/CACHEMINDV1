@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
         setUser(authUser);
         const wsList = await refreshWorkspaces();
-        const currentWs = wsList.find((w) => w.id === (me.active_tenant?.id || me.active_workspace?.id));
+        const currentWs = wsList.find((w) => w.id === me.active_tenant?.id);
         if (currentWs) setActiveWorkspace(currentWs);
         else if (wsList.length) { setActiveWorkspace(wsList[0]); }
 
@@ -151,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
       setUser(loggedUser);
       const wsList = await refreshWorkspaces();
-      const currentWs = wsList.find((w) => w.id === (res.active_tenant?.id || res.active_workspace?.id)) || wsList[0] || null;
+      const currentWs = wsList.find((w) => w.id === res.active_tenant?.id) || wsList[0] || null;
       setActiveWorkspace(currentWs);
       if (res.active_project) {
         setActiveProject({
@@ -205,13 +205,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const switchWorkspace = async (workspaceId: string) => {
-    let res: any = null;
-    try { res = await api.selectWorkspace(workspaceId); } catch {}
-    const ws = workspaces.find((w) => w.id === workspaceId);
-    if (ws) setActiveWorkspace(ws);
+    const previousWs = activeWorkspace;
+    const previousProjects = projects;
+    const previousProject = activeProject;
     try {
+      const res = await api.selectWorkspace(workspaceId);
+      const ws = workspaces.find((w) => w.id === workspaceId) || (res?.active_tenant ? {
+        id: res.active_tenant.id,
+        name: res.active_tenant.name,
+        role: res.active_tenant.role,
+      } : null);
+      if (ws) setActiveWorkspace(ws);
+
       const list = await api.listProjects(workspaceId);
-      const mapped = (Array.isArray(list) ? list : []).map((p: any) => ({
+      const mapped: ProjectInfo[] = (Array.isArray(list) ? list : []).map((p: any) => ({
         id: p.id || p.project_id,
         name: p.name || "Project",
         tenant_id: p.tenant_id || workspaceId,
@@ -228,13 +235,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setActiveProject(null);
       }
-    } catch {
-      setProjects([]);
-      setActiveProject(null);
+    } catch (err) {
+      setActiveWorkspace(previousWs);
+      setProjects(previousProjects);
+      setActiveProject(previousProject);
+      throw err;
     }
   };
 
   const switchProject = async (projectId: string) => {
+    const previousProject = activeProject;
     try {
       const res = await api.selectProject(projectId);
       if (res && res.active_project) {
@@ -243,11 +253,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           name: res.active_project.name,
           tenant_id: res.active_project.tenant_id,
         });
-        return;
       }
-    } catch {}
-    const proj = projects.find((p) => p.id === projectId);
-    if (proj) setActiveProject(proj);
+    } catch (err) {
+      setActiveProject(previousProject);
+      throw err;
+    }
   };
 
   return (

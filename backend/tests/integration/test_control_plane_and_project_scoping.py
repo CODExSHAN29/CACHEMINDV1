@@ -255,5 +255,155 @@ async def test_control_plane_contracts_and_cors_headers(
     )
     assert chat_res.status_code == 200
     # Telemetry headers returned on inference
+    assert "x-cachemind-status" in chat_res.headers
     assert "x-cachemind-cache" in chat_res.headers
     assert "x-cachemind-request-id" in chat_res.headers
+
+
+@pytest.mark.asyncio
+async def test_cross_workspace_project_selection_rejected_with_403(
+    async_client: AsyncClient,
+):
+    """
+    Verifies that an authenticated user who is a member of multiple workspaces
+    cannot select a project from Workspace B when their active workspace is Workspace A.
+    Must fail closed with HTTP 403 Forbidden ("Cannot select a project outside the active workspace.").
+    """
+    signup_res = await async_client.post(
+        "/v1/auth/signup",
+        json={
+            "email": "boundary.tester@cachemind.io",
+            "password": "Password12345!",
+            "full_name": "Boundary Tester",
+            "workspace_name": "Workspace Alpha",
+        },
+    )
+    assert signup_res.status_code == 201
+    ws_alpha_id = signup_res.json()["active_tenant"]["id"]
+
+    # Create Workspace Beta
+    ws_beta_res = await async_client.post(
+        "/v1/auth/workspaces",
+        json={"name": "Workspace Beta"},
+    )
+    assert ws_beta_res.status_code == 201
+    ws_beta_id = ws_beta_res.json()["id"]
+
+    # Switch to Workspace Beta and create a project in Beta
+    await async_client.post(f"/v1/auth/workspaces/{ws_beta_id}/select")
+    proj_beta_res = await async_client.post(
+        "/v1/auth/projects",
+        json={"name": "Project Beta 1"},
+    )
+    assert proj_beta_res.status_code == 201
+    proj_beta_id = proj_beta_res.json()["id"]
+
+    # Switch active workspace back to Workspace Alpha
+    await async_client.post(f"/v1/auth/workspaces/{ws_alpha_id}/select")
+    me_res = await async_client.get("/v1/auth/me")
+    assert me_res.json()["active_tenant"]["id"] == ws_alpha_id
+
+    # Attempt to select Project Beta 1 while active workspace is Workspace Alpha -> HTTP 403
+    select_cross_res = await async_client.post(f"/v1/auth/projects/{proj_beta_id}/select")
+    assert select_cross_res.status_code == 403
+    assert "outside the active workspace" in select_cross_res.json()["detail"]
+
+    # Also test via body endpoint
+    select_cross_body = await async_client.post(
+        "/v1/auth/projects/select",
+        json={"project_id": proj_beta_id},
+    )
+    assert select_cross_body.status_code == 403
+    assert "outside the active workspace" in select_cross_body.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_invalid_active_project_fails_closed_in_session_auth(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """
+    Verifies that when a session's active_project_id is set to an inactive or non-existent
+    project ID, session-based authentication in get_authenticated_identity fails closed
+    with HTTP 403 Forbidden rather than silently falling back to another project.
+    """
+    signup_res = await async_client.post(
+        "/v1/auth/signup",
+        json={
+            "email": "failclosed.proj@cachemind.io",
+            "password": "Password12345!",
+            "full_name": "Fail Closed Tester",
+            "workspace_name": "Fail Closed Workspace",
+        },
+    )
+    assert signup_res.status_code == 201
+
+    # Corrupt the session's active_project_id in DB to point to an invalid project ID
+    cookie_val = async_client.cookies.get(settings.SESSION_COOKIE_NAME)
+    assert cookie_val is not None
+    from backend.auth.session import hash_session_token
+    session_repo = SessionRepository(db_session)
+    stored_session = await session_repo.get_by_token_hash(hash_session_token(cookie_val))
+    assert stored_session is not None
+
+    stored_session.active_project_id = "proj_invalid_corrupted_id"
+    await db_session.commit()
+
+    # Inference via session cookie must fail closed with HTTP 403
+    chat_res = await async_client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": "Test fail closed"}],
+        },
+    )
+    assert chat_res.status_code == 403
+    assert "Selected project is inactive or inaccessible" in chat_res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_auth_session_response_schema_contract(
+    async_client: AsyncClient,
+):
+    """
+    Verifies that auth endpoints (signup, login, me, workspace select, project select)
+    return the clean AuthSessionResponse schema without raw_api_key.
+    """
+    # 1. Signup
+    signup_res = await async_client.post(
+        "/v1/auth/signup",
+        json={
+            "email": "schema.tester@cachemind.io",
+            "password": "Password12345!",
+            "full_name": "Schema Tester",
+            "workspace_name": "Schema Workspace",
+        },
+    )
+    assert signup_res.status_code == 201
+    data = signup_res.json()
+    assert "raw_api_key" not in data
+    assert "user" in data
+    assert "active_tenant" in data
+    assert "active_project" in data
+    assert "workspaces" in data
+    assert "projects" in data
+    assert "api_keys" in data
+
+    # 2. Get Me
+    me_res = await async_client.get("/v1/auth/me")
+    assert me_res.status_code == 200
+    me_data = me_res.json()
+    assert "raw_api_key" not in me_data
+
+    # 3. Login
+    login_res = await async_client.post(
+        "/v1/auth/login",
+        json={
+            "email": "schema.tester@cachemind.io",
+            "password": "Password12345!",
+        },
+    )
+    assert login_res.status_code == 200
+    login_data = login_res.json()
+    assert "raw_api_key" not in login_data
+
