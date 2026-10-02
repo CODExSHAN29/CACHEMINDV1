@@ -1,5 +1,6 @@
 import pytest
 from httpx import AsyncClient
+from backend.app.config import settings
 
 
 @pytest.mark.asyncio
@@ -14,7 +15,9 @@ async def test_billing_plans_endpoint(async_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_billing_usage_endpoint(async_client: AsyncClient, tenant_a_fixtures: dict):
-    admin_headers = {"Authorization": f"Bearer {tenant_a_fixtures['raw_key']}"}
+    master_key = settings.ADMIN_MASTER_KEY or "cm_master_admin_key_super_secret"
+    settings.ADMIN_MASTER_KEY = master_key
+    admin_headers = {"Authorization": f"Bearer {master_key}"}
     response = await async_client.get(
         "/v1/billing/usage?tenant_id=tenant_default&tier=pro",
         headers=admin_headers,

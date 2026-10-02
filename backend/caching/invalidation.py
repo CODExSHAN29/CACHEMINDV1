@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class CachePurgeRequest(BaseModel):
+    tenant_id: Optional[str] = None
     project_id: Optional[str] = None
     model: Optional[str] = None
     namespace: Optional[str] = None

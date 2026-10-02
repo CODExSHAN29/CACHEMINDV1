@@ -1,10 +1,13 @@
 import pytest
 from httpx import AsyncClient
+from backend.app.config import settings
 
 
 @pytest.mark.asyncio
 async def test_admin_api_end_to_end_provisioning(async_client: AsyncClient, tenant_a_fixtures: dict):
-    admin_headers = {"Authorization": f"Bearer {tenant_a_fixtures['raw_key']}"}
+    master_key = settings.ADMIN_MASTER_KEY or "cm_master_admin_key_super_secret"
+    settings.ADMIN_MASTER_KEY = master_key
+    admin_headers = {"Authorization": f"Bearer {master_key}"}
 
     # 1. Create Tenant
     t_resp = await async_client.post(

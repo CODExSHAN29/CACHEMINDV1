@@ -143,6 +143,7 @@ async def tenant_a_fixtures(db_session: AsyncSession):
         key_prefix=key_prefix,
         key_hash=key_hash,
         name="Alpha Key 1",
+        role="admin",
         is_active=True,
     )
     db_session.add(api_key)
@@ -174,6 +175,7 @@ async def tenant_b_fixtures(db_session: AsyncSession):
         key_prefix=key_prefix,
         key_hash=key_hash,
         name="Beta Key 1",
+        role="admin",
         is_active=True,
     )
     db_session.add(api_key)
