@@ -74,3 +74,27 @@ async def test_migration_and_seed_cli_helpers(db_session):
         tenant = result.scalar_one_or_none()
         assert tenant is not None
         assert tenant.id == settings.DEV_TENANT_ID
+
+
+@pytest.mark.asyncio
+async def test_init_db_fails_closed_on_migration_error(monkeypatch):
+    """
+    Verifies that when AUTO_RUN_MIGRATIONS is True, any exception raised during
+    Alembic migration execution is re-raised immediately to abort startup,
+    rather than silently falling back to Base.metadata.create_all().
+    """
+    import backend.db.session as db_session_mod
+
+    monkeypatch.setattr(settings, "AUTO_RUN_MIGRATIONS", True)
+
+    def failing_upgrade(cfg, revision):
+        raise RuntimeError("Simulated Alembic Migration Failure: Schema lock conflict")
+
+    import alembic.command
+    monkeypatch.setattr(alembic.command, "upgrade", failing_upgrade)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await db_session_mod.init_db()
+
+    assert "Simulated Alembic Migration Failure" in str(exc_info.value)
+

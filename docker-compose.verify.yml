@@ -3,7 +3,7 @@ version: "3.8"
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: cachemind-postgres
+    container_name: cachemind-postgres-verify
     restart: unless-stopped
     ports:
       - "5432:5432"
@@ -12,37 +12,37 @@ services:
       - POSTGRES_PASSWORD=cachemind_password
       - POSTGRES_DB=cachemind_db
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_verify_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cachemind_user -d cachemind_db"]
       interval: 5s
       timeout: 5s
       retries: 5
     networks:
-      - cachemind-net
+      - cachemind-verify-net
 
   redis:
     image: redis:7.2-alpine
-    container_name: cachemind-redis
+    container_name: cachemind-redis-verify
     restart: unless-stopped
     ports:
       - "6379:6379"
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
-      - redis_data:/data
+      - redis_verify_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
     networks:
-      - cachemind-net
+      - cachemind-verify-net
 
   migration:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: cachemind-migration
+    container_name: cachemind-migration-verify
     command: ["alembic", "upgrade", "head"]
     environment:
       - DATABASE_URL=postgresql+asyncpg://cachemind_user:cachemind_password@postgres:5432/cachemind_db
@@ -50,18 +50,18 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - cachemind-net
+      - cachemind-verify-net
 
   cachemind-gateway:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: cachemind-gateway
+    container_name: cachemind-gateway-verify
     restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      - ENVIRONMENT=production
+      - ENVIRONMENT=verification
       - LOG_LEVEL=info
       - HOST=0.0.0.0
       - PORT=8000
@@ -71,11 +71,11 @@ services:
       - AUTO_RUN_MIGRATIONS=false
       - VECTOR_BACKEND=pgvector
       - SEMANTIC_CACHE_MODE=safe
-      - ALLOW_MOCK_PROVIDERS=false
-      - ALLOW_MOCK_EMBEDDINGS=false
-      - ADMIN_MASTER_KEY=${ADMIN_MASTER_KEY:?ADMIN_MASTER_KEY is required}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ALLOW_MOCK_PROVIDERS=true
+      - ALLOW_MOCK_EMBEDDINGS=true
+      - ADMIN_MASTER_KEY=cm_verify_master_sec_09a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4
+      - OPENAI_API_KEY=mock-openai-key
+      - ANTHROPIC_API_KEY=mock-anthropic-key
       - DB_POOL_SIZE=20
       - DB_MAX_OVERFLOW=10
       - DB_POOL_TIMEOUT=30.0
@@ -91,11 +91,11 @@ services:
       migration:
         condition: service_completed_successfully
     networks:
-      - cachemind-net
+      - cachemind-verify-net
 
   prometheus:
     image: prom/prometheus:latest
-    container_name: cachemind-prometheus
+    container_name: cachemind-prometheus-verify
     restart: unless-stopped
     ports:
       - "9090:9090"
@@ -104,12 +104,12 @@ services:
     depends_on:
       - cachemind-gateway
     networks:
-      - cachemind-net
+      - cachemind-verify-net
 
 volumes:
-  postgres_data:
-  redis_data:
+  postgres_verify_data:
+  redis_verify_data:
 
 networks:
-  cachemind-net:
+  cachemind-verify-net:
     driver: bridge

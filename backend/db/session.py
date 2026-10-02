@@ -124,17 +124,14 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     """Initialize database tables for testing or development."""
     if settings.AUTO_RUN_MIGRATIONS:
-        try:
-            logger.info("AUTO_RUN_MIGRATIONS is enabled. Running Alembic migrations...")
-            from alembic import command
-            from alembic.config import Config
-            alembic_cfg = Config("alembic.ini")
-            alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
-            command.upgrade(alembic_cfg, "head")
-            logger.info("Alembic migrations completed successfully.")
-            return
-        except Exception as exc:
-            logger.warning("Auto migration failed (%s); falling back to metadata.create_all", exc)
+        logger.info("AUTO_RUN_MIGRATIONS is enabled. Running Alembic migrations...")
+        from alembic import command
+        from alembic.config import Config
+        alembic_cfg = Config("alembic.ini")
+        alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic migrations completed successfully.")
+        return
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

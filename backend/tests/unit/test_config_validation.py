@@ -72,3 +72,19 @@ def test_production_mode_passes_with_valid_config():
     )
     # Should not raise
     cfg.validate_production_configuration()
+
+
+def test_verification_mode_allows_mock_flags():
+    """Verification mode should pass validation while allowing mock provider flags for staging verification."""
+    cfg = Settings(
+        ENVIRONMENT="verification",
+        ADMIN_MASTER_KEY="cm_verify_master_sec_09a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4",
+        DATABASE_URL="postgresql+asyncpg://user:pass@localhost:5432/cachemind_verify",
+        CACHE_BACKEND="redis",
+        REDIS_URL="redis://localhost:6379/0",
+        VECTOR_BACKEND="pgvector",
+        ALLOW_MOCK_PROVIDERS=True,
+        ALLOW_MOCK_EMBEDDINGS=True,
+    )
+    cfg.validate_production_configuration()
+
