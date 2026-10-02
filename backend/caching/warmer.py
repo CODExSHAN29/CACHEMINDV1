@@ -9,6 +9,7 @@ from backend.caching.factory import get_cache_backend
 from backend.caching.fingerprint import compute_exact_request_hash, compute_scope_hash, extract_system_prompt
 from backend.caching.models import CachedResponse
 from backend.normalization.models import NormalizedInferenceRequest, NormalizedMessage
+from backend.security.pii import PIIBlockedException, PIISanitizer
 from backend.semantic.factory import get_semantic_cache_service
 from backend.semantic.policy import evaluate_semantic_eligibility
 
@@ -85,18 +86,20 @@ class CacheWarmer:
 
                 if isinstance(item.prompt, str):
                     messages.append(NormalizedMessage(role="user", content=item.prompt))
-                    last_user_text = item.prompt
                 elif isinstance(item.prompt, list):
                     for m in item.prompt:
                         role = m.get("role", "user")
                         content = m.get("content", "")
                         messages.append(NormalizedMessage(role=role, content=content))
-                    # Find last user text
-                    user_msgs = [m.content for m in messages if m.role == "user" and isinstance(m.content, str)]
-                    last_user_text = user_msgs[-1] if user_msgs else ""
                 else:
-                    last_user_text = str(item.prompt)
-                    messages.append(NormalizedMessage(role="user", content=last_user_text))
+                    messages.append(NormalizedMessage(role="user", content=str(item.prompt)))
+
+                # Enforce server PII sanitization on ingress warming messages
+                PIISanitizer.sanitize_messages(messages, mode=settings.PII_MASKING_MODE)
+
+                # Determine last user text from sanitized messages
+                user_msgs = [m.content for m in messages if m.role == "user" and isinstance(m.content, str)]
+                last_user_text = user_msgs[-1] if user_msgs else ""
 
                 norm_req = NormalizedInferenceRequest(
                     provider=item.provider,
@@ -132,8 +135,10 @@ class CacheWarmer:
                     tool_choice=norm_req.tool_choice,
                 )
 
-                # 3. Build Canonical Response Dict
+                # 3. Build Canonical Response Dict (Enforce PII sanitization on response text)
                 resolved_content = item.response or getattr(item, "completion", None) or getattr(item, "response_text", "") or ""
+                sanitized_resp = PIISanitizer.sanitize(resolved_content, mode=settings.PII_MASKING_MODE)
+                resolved_content = sanitized_resp.sanitized_text
                 in_tokens = max(1, len(last_user_text) // 4 + 4)
                 out_tokens = max(1, len(resolved_content) // 4 + 1)
                 req_id = f"cm-warm-{uuid.uuid4().hex[:12]}"
@@ -208,6 +213,15 @@ class CacheWarmer:
 
                 exact_hashes.append(exact_hash)
 
+            except PIIBlockedException as exc:
+                failed_count += 1
+                err_msg = f"Item #{idx} failed to warm: PII detected and blocked by policy ({len(exc.entities)} entities)."
+                logger.warning(
+                    "Cache warming item #%d blocked due to PII detection under block policy (%d entities)",
+                    idx,
+                    len(exc.entities),
+                )
+                errors.append(err_msg)
             except Exception as exc:
                 failed_count += 1
                 err_msg = f"Item #{idx} failed to warm: {str(exc)}"

@@ -18,7 +18,7 @@ from backend.normalization.openai_adapter import OpenAIAdapter
 from backend.metrics.collector import get_metrics_collector
 from backend.ratelimit.limiter import get_rate_limiter
 from backend.routing.engine import get_routing_engine
-from backend.security.pii import PIISanitizer, PIIBlockedException
+from backend.security.pii import PIISanitizer, PIIBlockedException, resolve_pii_mode
 from backend.streaming.accumulator import StreamAccumulator
 from backend.streaming.sse import create_cached_stream_generator
 from backend.telemetry.service import TelemetryService
@@ -64,13 +64,20 @@ async def create_chat_completion(
         if hdr_fallback is not None:
             norm_req.allow_provider_fallback = hdr_fallback.strip().lower() in ("true", "1", "yes")
 
-        # PII Sanitization
-        pii_mode = request.headers.get("X-CacheMind-PII-Mode") or settings.PII_MASKING_MODE
-        for msg in norm_req.messages:
-            if isinstance(msg.content, str) and msg.content:
-                sanitization = PIISanitizer.sanitize(msg.content, mode=pii_mode)
-                if sanitization.has_pii:
-                    msg.content = sanitization.sanitized_text
+        # PII Policy Resolution & Sanitization
+        hdr_pii = request.headers.get("X-CacheMind-PII-Mode")
+        try:
+            effective_pii_mode = resolve_pii_mode(
+                server_mode=settings.PII_MASKING_MODE,
+                requested_mode=hdr_pii,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            )
+
+        PIISanitizer.sanitize_messages(norm_req.messages, mode=effective_pii_mode)
 
     except PIIBlockedException as exc:
         raise HTTPException(

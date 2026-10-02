@@ -1,13 +1,70 @@
 """
 CacheMind Security - Ingress PII & Sensitive Information Sanitizer
+
+Note on Cache Identity & Mask Collisions (Known Limitation):
+When PII masking mode ('mask') is active, distinct user prompts that differ only in sensitive
+entity values (e.g., different email addresses or credit card numbers) will produce identical
+redacted text tokens (e.g., '[REDACTED_EMAIL]'). Consequently, exact and semantic cache keys
+derived from the sanitized request will match across those prompts. This intentional design
+preserves cache reuse for generalized templates without storing or leaking raw PII in cache
+stores or upstream provider logs.
 """
 
 import ipaddress
 import re
-from typing import List, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from backend.app.config import settings
+from backend.normalization.models import NormalizedMessage
 from backend.security.models import PIIEntity, PIISanitizationResult
+
+
+PII_STRICTNESS_ORDER: Dict[str, int] = {
+    "passthrough": 0,
+    "mask": 1,
+    "block": 2,
+}
+
+
+def resolve_pii_mode(server_mode: str, requested_mode: str | None = None) -> str:
+    """
+    Monotonically resolves the effective PII mode between the authoritative
+    server policy and the client's requested mode.
+
+    Strictness lattice:
+        passthrough (0) < mask (1) < block (2)
+
+    Composition rule:
+        effective_mode = max(server_mode, requested_mode)
+
+    A client may request stricter security (e.g. server mask -> client block),
+    but cannot downgrade a stricter server policy (e.g. server block -> client passthrough).
+    Invalid server or client tokens raise a ValueError.
+    """
+    if server_mode is None or not str(server_mode).strip():
+        valid_modes = ", ".join(repr(m) for m in PII_STRICTNESS_ORDER.keys())
+        raise ValueError(
+            f"Invalid server PII mode '{server_mode}'. Supported modes: {valid_modes}"
+        )
+
+    server = str(server_mode).strip().lower()
+    if server not in PII_STRICTNESS_ORDER:
+        valid_modes = ", ".join(repr(m) for m in PII_STRICTNESS_ORDER.keys())
+        raise ValueError(
+            f"Invalid server PII mode '{server_mode}'. Supported modes: {valid_modes}"
+        )
+
+    if requested_mode is None or not str(requested_mode).strip():
+        return server
+
+    client = str(requested_mode).strip().lower()
+    if client not in PII_STRICTNESS_ORDER:
+        valid_modes = ", ".join(repr(m) for m in PII_STRICTNESS_ORDER.keys())
+        raise ValueError(
+            f"Invalid PII mode '{requested_mode}'. Supported modes: {valid_modes}"
+        )
+
+    return client if PII_STRICTNESS_ORDER[client] > PII_STRICTNESS_ORDER[server] else server
 
 
 class PIIBlockedException(Exception):
@@ -233,8 +290,19 @@ class PIISanitizer:
     ) -> PIISanitizationResult:
         """
         Sanitizes the input text according to the selected mode (mask, block, passthrough).
+        Rejects unrecognized modes with ValueError.
         """
-        active_mode = mode or settings.PII_MASKING_MODE
+        raw_mode = mode or settings.PII_MASKING_MODE
+        if raw_mode is None or not str(raw_mode).strip():
+            active_mode = "mask"
+        else:
+            active_mode = str(raw_mode).strip().lower()
+
+        if active_mode not in PII_STRICTNESS_ORDER:
+            valid_modes = ", ".join(repr(m) for m in PII_STRICTNESS_ORDER.keys())
+            raise ValueError(
+                f"Invalid PII mode '{mode}'. Supported modes: {valid_modes}"
+            )
 
         if active_mode == "passthrough" or not settings.PII_MASKING_ENABLED or not text:
             return PIISanitizationResult(sanitized_text=text, detected_entities=[], has_pii=False)
@@ -262,3 +330,64 @@ class PIISanitizer:
             detected_entities=entities,
             has_pii=True,
         )
+
+    @classmethod
+    def sanitize_content(
+        cls,
+        content: Union[str, List[Dict[str, Any]], None],
+        mode: str | None = None,
+    ) -> Tuple[Union[str, List[Dict[str, Any]], None], List[PIIEntity]]:
+        """
+        Sanitizes message content, recursively handling both plain text strings
+        and OpenAI-compatible multi-part content arrays (e.g. [{'type': 'text', 'text': '...'}]).
+        Preserves non-text content parts (images, audio) intact.
+        """
+        if content is None:
+            return None, []
+
+        if isinstance(content, str):
+            res = cls.sanitize(content, mode=mode)
+            return res.sanitized_text, res.detected_entities
+
+        if isinstance(content, list):
+            sanitized_list: List[Dict[str, Any]] = []
+            all_entities: List[PIIEntity] = []
+            for part in content:
+                if isinstance(part, dict):
+                    part_copy = dict(part)
+                    if part_copy.get("type") == "text" and isinstance(part_copy.get("text"), str):
+                        res = cls.sanitize(part_copy["text"], mode=mode)
+                        part_copy["text"] = res.sanitized_text
+                        all_entities.extend(res.detected_entities)
+                    elif "text" in part_copy and isinstance(part_copy.get("text"), str):
+                        res = cls.sanitize(part_copy["text"], mode=mode)
+                        part_copy["text"] = res.sanitized_text
+                        all_entities.extend(res.detected_entities)
+                    sanitized_list.append(part_copy)
+                else:
+                    sanitized_list.append(part)
+            return sanitized_list, all_entities
+
+        return content, []
+
+    @classmethod
+    def sanitize_messages(
+        cls,
+        messages: List[NormalizedMessage],
+        mode: str | None = None,
+    ) -> List[PIIEntity]:
+        """
+        Sanitizes a list of NormalizedMessage objects in-place and returns all detected PII entities.
+        """
+        if not messages:
+            return []
+
+        all_detected: List[PIIEntity] = []
+        for msg in messages:
+            if msg.content is not None:
+                sanitized_content, entities = cls.sanitize_content(msg.content, mode=mode)
+                msg.content = sanitized_content
+                all_detected.extend(entities)
+
+        return all_detected
+
