@@ -19,7 +19,7 @@ from backend.api.v1.models_endpoint import router as models_router
 from backend.auth.keys import hash_api_key
 from backend.db.models import APIKey, Project, Tenant
 from backend.db.session import AsyncSessionLocal, close_db, init_db
-from backend.providers.factory import get_provider
+from backend.providers.registry import get_provider_registry
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
@@ -120,8 +120,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     yield
     logger.info("Shutting down CacheMind Gateway...")
-    provider = get_provider()
-    await provider.close()
+    await get_provider_registry().close_all()
     await close_db()
 
 

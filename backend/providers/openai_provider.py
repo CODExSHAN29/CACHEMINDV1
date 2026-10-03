@@ -3,18 +3,136 @@ import logging
 import time
 from typing import Any, AsyncIterator, Dict, Optional
 import httpx
-from fastapi import HTTPException, status
 
 from backend.app.config import settings
 from backend.normalization.models import NormalizedInferenceRequest
-from backend.providers.base import BaseProvider, ProviderResponse
+from backend.providers.base import (
+    BaseProvider,
+    ProviderError,
+    ProviderErrorKind,
+    ProviderResponse,
+    make_safe_provider_message,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _build_openai_chat_payload(
+    request: NormalizedInferenceRequest,
+    stream: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """
+    Serializes NormalizedInferenceRequest into a clean OpenAI Chat Completions wire payload.
+    Strictly excludes CacheMind-internal metadata (provider, namespace, tags,
+    attachment_hashes, provider_options, timeout, client_request_id, allow_provider_fallback).
+    """
+    payload: Dict[str, Any] = {
+        "model": request.model,
+        "messages": [msg.model_dump(exclude_none=True) for msg in request.messages],
+    }
+
+    if request.tools is not None:
+        payload["tools"] = request.tools
+    if request.tool_choice is not None:
+        payload["tool_choice"] = request.tool_choice
+    if request.temperature is not None:
+        payload["temperature"] = request.temperature
+    if request.top_p is not None:
+        payload["top_p"] = request.top_p
+    if request.n is not None and request.n != 1:
+        payload["n"] = request.n
+    if request.seed is not None:
+        payload["seed"] = request.seed
+    if request.stop is not None:
+        payload["stop"] = request.stop
+    if request.max_tokens is not None:
+        payload["max_tokens"] = request.max_tokens
+    if request.max_completion_tokens is not None:
+        payload["max_completion_tokens"] = request.max_completion_tokens
+    if request.presence_penalty is not None:
+        payload["presence_penalty"] = request.presence_penalty
+    if request.frequency_penalty is not None:
+        payload["frequency_penalty"] = request.frequency_penalty
+    if request.logit_bias is not None:
+        payload["logit_bias"] = request.logit_bias
+    if request.response_format is not None:
+        payload["response_format"] = request.response_format
+
+    is_stream = request.stream if stream is None else stream
+    if is_stream:
+        payload["stream"] = True
+
+    if request.user is not None:
+        payload["user"] = request.user
+
+    return payload
+
+
+def _normalize_openai_error(status_code: int, headers: httpx.Headers, body_text: str) -> ProviderError:
+    provider_code: Optional[str] = None
+    raw_error_message: str = ""
+    try:
+        data = json.loads(body_text)
+        err = data.get("error", {})
+        if isinstance(err, dict):
+            provider_code = str(err.get("code") or err.get("type") or "") or None
+            raw_error_message = str(err.get("message") or "")
+    except Exception:
+        pass
+
+    retry_after: Optional[float] = None
+    retry_header = headers.get("retry-after")
+    if retry_header:
+        try:
+            retry_after = float(retry_header)
+        except ValueError:
+            pass
+
+    if status_code == 401:
+        kind = ProviderErrorKind.AUTHENTICATION_ERROR
+        retryable = False
+    elif status_code == 403:
+        kind = ProviderErrorKind.PERMISSION_DENIED
+        retryable = False
+    elif status_code == 404:
+        kind = ProviderErrorKind.NOT_FOUND
+        retryable = False
+    elif status_code == 429:
+        kind = ProviderErrorKind.RATE_LIMIT_EXCEEDED
+        retryable = True
+    elif status_code in (400, 422):
+        lower_check = (raw_error_message + " " + (provider_code or "")).lower()
+        if "context_length" in lower_check or "maximum context length" in lower_check:
+            kind = ProviderErrorKind.CONTEXT_LENGTH_EXCEEDED
+        elif "content_filter" in lower_check or "safety" in lower_check:
+            kind = ProviderErrorKind.CONTENT_FILTER
+        else:
+            kind = ProviderErrorKind.INVALID_REQUEST
+        retryable = False
+    elif status_code in (500, 502, 503, 504):
+        kind = ProviderErrorKind.UPSTREAM_UNAVAILABLE if status_code in (502, 503, 504) else ProviderErrorKind.INTERNAL_SERVER_ERROR
+        retryable = True
+    else:
+        kind = ProviderErrorKind.UNKNOWN
+        retryable = (status_code >= 500)
+
+    safe_msg = make_safe_provider_message("openai", kind, status_code)
+
+    return ProviderError(
+        provider="openai",
+        kind=kind,
+        status_code=status_code,
+        provider_code=provider_code,
+        retryable=retryable,
+        retry_after_seconds=retry_after,
+        safe_message=safe_msg,
+    )
 
 
 class OpenAIProvider(BaseProvider):
     """
     Production-ready asynchronous OpenAI upstream client using pooled HTTPX connections.
+    Normalizes upstream errors into typed ProviderError instances without leaking sensitive headers.
     """
 
     def __init__(
@@ -41,9 +159,12 @@ class OpenAIProvider(BaseProvider):
         self, request: NormalizedInferenceRequest
     ) -> ProviderResponse:
         if not self.api_key:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="OpenAI upstream API key is not configured.",
+            raise ProviderError(
+                provider="openai",
+                kind=ProviderErrorKind.CONFIGURATION_ERROR,
+                status_code=500,
+                retryable=False,
+                safe_message="OpenAI upstream API key is not configured.",
             )
 
         headers = {
@@ -51,12 +172,7 @@ class OpenAIProvider(BaseProvider):
             "Content-Type": "application/json",
         }
 
-        # Build payload
-        payload = request.to_inference_identity_dict()
-        if request.stream:
-            payload["stream"] = True
-        if request.user:
-            payload["user"] = request.user
+        payload = _build_openai_chat_payload(request, stream=request.stream)
 
         start_time = time.perf_counter_ns()
         try:
@@ -68,21 +184,9 @@ class OpenAIProvider(BaseProvider):
             duration_ms = (time.perf_counter_ns() - start_time) / 1_000_000
 
             if response.status_code != 200:
-                logger.error(
-                    "OpenAI upstream error: status=%d body=%s",
-                    response.status_code,
-                    response.text,
-                )
-                try:
-                    err_json = response.json()
-                    err_msg = err_json.get("error", {}).get("message", response.text)
-                except Exception:
-                    err_msg = response.text
-
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"Upstream provider error: {err_msg}",
-                )
+                err = _normalize_openai_error(response.status_code, response.headers, response.text)
+                logger.error("OpenAI upstream error: status=%d kind=%s msg=%s", response.status_code, err.kind.value, err.safe_message)
+                raise err
 
             data = response.json()
             usage = data.get("usage", {})
@@ -100,25 +204,34 @@ class OpenAIProvider(BaseProvider):
         except httpx.TimeoutException as exc:
             duration_ms = (time.perf_counter_ns() - start_time) / 1_000_000
             logger.error("OpenAI upstream timeout after %.2fms", duration_ms)
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail="Upstream LLM provider request timed out.",
+            raise ProviderError(
+                provider="openai",
+                kind=ProviderErrorKind.TIMEOUT,
+                status_code=504,
+                retryable=True,
+                safe_message="OpenAI upstream request timed out.",
             ) from exc
         except httpx.RequestError as exc:
             duration_ms = (time.perf_counter_ns() - start_time) / 1_000_000
             logger.error("OpenAI upstream network error: %s", exc)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Network error communicating with upstream provider: {str(exc)}",
+            raise ProviderError(
+                provider="openai",
+                kind=ProviderErrorKind.NETWORK_ERROR,
+                status_code=502,
+                retryable=True,
+                safe_message=f"Network error communicating with OpenAI: {type(exc).__name__}",
             ) from exc
 
     async def chat_completion_stream(
         self, request: NormalizedInferenceRequest
     ) -> AsyncIterator[str]:
         if not self.api_key:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="OpenAI upstream API key is not configured.",
+            raise ProviderError(
+                provider="openai",
+                kind=ProviderErrorKind.CONFIGURATION_ERROR,
+                status_code=500,
+                retryable=False,
+                safe_message="OpenAI upstream API key is not configured.",
             )
 
         headers = {
@@ -126,10 +239,7 @@ class OpenAIProvider(BaseProvider):
             "Content-Type": "application/json",
         }
 
-        payload = request.to_inference_identity_dict()
-        payload["stream"] = True
-        if request.user:
-            payload["user"] = request.user
+        payload = _build_openai_chat_payload(request, stream=True)
 
         try:
             req = self._client.build_request(
@@ -142,21 +252,9 @@ class OpenAIProvider(BaseProvider):
 
             if response.status_code != 200:
                 await response.aread()
-                logger.error(
-                    "OpenAI upstream stream error: status=%d body=%s",
-                    response.status_code,
-                    response.text,
-                )
-                try:
-                    err_json = response.json()
-                    err_msg = err_json.get("error", {}).get("message", response.text)
-                except Exception:
-                    err_msg = response.text
-
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"Upstream provider error: {err_msg}",
-                )
+                err = _normalize_openai_error(response.status_code, response.headers, response.text)
+                logger.error("OpenAI upstream stream error: status=%d kind=%s msg=%s", response.status_code, err.kind.value, err.safe_message)
+                raise err
 
             async for line in response.aiter_lines():
                 if line:
@@ -164,15 +262,21 @@ class OpenAIProvider(BaseProvider):
 
         except httpx.TimeoutException as exc:
             logger.error("OpenAI upstream stream timeout")
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail="Upstream LLM provider request timed out.",
+            raise ProviderError(
+                provider="openai",
+                kind=ProviderErrorKind.TIMEOUT,
+                status_code=504,
+                retryable=True,
+                safe_message="OpenAI upstream stream request timed out.",
             ) from exc
         except httpx.RequestError as exc:
             logger.error("OpenAI upstream stream network error: %s", exc)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Network error communicating with upstream provider: {str(exc)}",
+            raise ProviderError(
+                provider="openai",
+                kind=ProviderErrorKind.NETWORK_ERROR,
+                status_code=502,
+                retryable=True,
+                safe_message=f"Network error communicating with OpenAI: {type(exc).__name__}",
             ) from exc
 
     async def close(self) -> None:

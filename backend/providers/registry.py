@@ -7,6 +7,7 @@ from backend.providers.base import BaseProvider
 from backend.providers.mock_provider import MockProvider
 from backend.providers.ollama_provider import OllamaProvider
 from backend.providers.openai_provider import OpenAIProvider
+from backend.routing.model_catalog import resolve_model
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +41,6 @@ class ProviderRegistry:
         if name_lower in self._providers:
             return self._providers[name_lower]
 
-        # Fallback to test double if registered
-        if "mock" in self._providers:
-            return self._providers["mock"]
-
         provider: Optional[BaseProvider] = None
 
         if name_lower == "openai":
@@ -71,6 +68,8 @@ class ProviderRegistry:
                 provider = MockProvider(provider_name="mock")
             else:
                 raise ProviderConfigurationError("Mock provider is not allowed in production")
+        elif "mock" in self._providers:
+            return self._providers["mock"]
 
         if provider is not None:
             self._providers[name_lower] = provider
@@ -79,33 +78,15 @@ class ProviderRegistry:
 
     def resolve_provider_for_model(self, model: str) -> str:
         """
-        Determines the appropriate provider name based on model identifier.
+        Determines the appropriate provider name based strictly on authoritative model catalog.
+        Fails deterministically with UnknownModelError if model is not recognized.
         """
-        m = model.lower()
-        if m.startswith("claude"):
-            return "anthropic"
-        elif m.startswith("gpt-") or m.startswith("o1") or m.startswith("o3") or m.startswith("text-"):
-            return "openai"
-        elif any(m.startswith(prefix) for prefix in ("llama", "mistral", "deepseek", "phi", "qwen", "gemma")):
-            return "ollama"
-        elif m.startswith("mock"):
-            return "mock"
-
-        # Default fallback — never silently default to mock in production
-        if settings.OPENAI_API_KEY:
-            return "openai"
-        elif settings.ANTHROPIC_API_KEY:
-            return "anthropic"
-        elif _mocks_allowed():
-            return "mock"
-        else:
-            raise ProviderConfigurationError(
-                "Cannot resolve provider for model '%s': no provider credentials configured and mocks disabled" % model
-            )
+        target = resolve_model(model)
+        return target.provider
 
     async def close_all(self) -> None:
         """Closes all active provider HTTP clients."""
-        for name, provider in self._providers.items():
+        for name, provider in list(self._providers.items()):
             try:
                 await provider.close()
             except Exception as e:

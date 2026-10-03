@@ -16,8 +16,12 @@ from backend.caching.models import CachedResponse
 from backend.db.session import get_db
 from backend.normalization.openai_adapter import OpenAIAdapter
 from backend.metrics.collector import get_metrics_collector
+from backend.providers.base import ProviderError
 from backend.ratelimit.limiter import get_rate_limiter
-from backend.routing.engine import get_routing_engine
+from backend.routing.engine import (
+    InvalidFallbackConfigurationError,
+    get_routing_engine,
+)
 from backend.security.pii import PIISanitizer, PIIBlockedException, resolve_pii_mode
 from backend.streaming.accumulator import StreamAccumulator
 from backend.streaming.sse import create_cached_stream_generator
@@ -395,6 +399,49 @@ async def create_chat_completion(
             return StreamingResponse(accumulator, media_type="text/event-stream", headers=headers)
         except HTTPException:
             raise
+        except ProviderError as pe:
+            gateway_latency_ms = (time.perf_counter_ns() - gateway_start_ns) / 1_000_000
+            await TelemetryService.record_request_log(
+                db=db,
+                request_id=request_id,
+                tenant_id=identity.tenant_id,
+                project_id=identity.project_id,
+                provider=norm_req.provider,
+                requested_model=norm_req.model,
+                actual_model=norm_req.model,
+                cache_status="ERROR",
+                exact_request_hash=exact_request_hash,
+                gateway_latency_ms=gateway_latency_ms,
+                upstream_latency_ms=None,
+                exact_cache_lookup_ms=exact_cache_lookup_ms,
+                upstream_called=True,
+            )
+            status_code = pe.status_code if pe.status_code and pe.status_code >= 400 else status.HTTP_502_BAD_GATEWAY
+            raise HTTPException(
+                status_code=status_code,
+                detail=pe.safe_message,
+            )
+        except InvalidFallbackConfigurationError as fe:
+            gateway_latency_ms = (time.perf_counter_ns() - gateway_start_ns) / 1_000_000
+            await TelemetryService.record_request_log(
+                db=db,
+                request_id=request_id,
+                tenant_id=identity.tenant_id,
+                project_id=identity.project_id,
+                provider=norm_req.provider,
+                requested_model=norm_req.model,
+                actual_model=norm_req.model,
+                cache_status="ERROR",
+                exact_request_hash=exact_request_hash,
+                gateway_latency_ms=gateway_latency_ms,
+                upstream_latency_ms=None,
+                exact_cache_lookup_ms=exact_cache_lookup_ms,
+                upstream_called=False,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(fe),
+            )
         except Exception as exc:
             gateway_latency_ms = (time.perf_counter_ns() - gateway_start_ns) / 1_000_000
             await TelemetryService.record_request_log(
@@ -414,7 +461,7 @@ async def create_chat_completion(
             )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Upstream provider failure: {str(exc)}",
+                detail="An unexpected upstream error occurred.",
             )
 
     # Non-streaming Cache Miss pathway with Single-Flight Coalescing
@@ -432,6 +479,49 @@ async def create_chat_completion(
         upstream_latency_ms = (time.perf_counter_ns() - upstream_start_ns) / 1_000_000
     except HTTPException:
         raise
+    except ProviderError as pe:
+        gateway_latency_ms = (time.perf_counter_ns() - gateway_start_ns) / 1_000_000
+        await TelemetryService.record_request_log(
+            db=db,
+            request_id=request_id,
+            tenant_id=identity.tenant_id,
+            project_id=identity.project_id,
+            provider=norm_req.provider,
+            requested_model=norm_req.model,
+            actual_model=norm_req.model,
+            cache_status="ERROR",
+            exact_request_hash=exact_request_hash,
+            gateway_latency_ms=gateway_latency_ms,
+            upstream_latency_ms=(time.perf_counter_ns() - upstream_start_ns) / 1_000_000,
+            exact_cache_lookup_ms=exact_cache_lookup_ms,
+            upstream_called=True,
+        )
+        status_code = pe.status_code if pe.status_code and pe.status_code >= 400 else status.HTTP_502_BAD_GATEWAY
+        raise HTTPException(
+            status_code=status_code,
+            detail=pe.safe_message,
+        )
+    except InvalidFallbackConfigurationError as fe:
+        gateway_latency_ms = (time.perf_counter_ns() - gateway_start_ns) / 1_000_000
+        await TelemetryService.record_request_log(
+            db=db,
+            request_id=request_id,
+            tenant_id=identity.tenant_id,
+            project_id=identity.project_id,
+            provider=norm_req.provider,
+            requested_model=norm_req.model,
+            actual_model=norm_req.model,
+            cache_status="ERROR",
+            exact_request_hash=exact_request_hash,
+            gateway_latency_ms=gateway_latency_ms,
+            upstream_latency_ms=(time.perf_counter_ns() - upstream_start_ns) / 1_000_000,
+            exact_cache_lookup_ms=exact_cache_lookup_ms,
+            upstream_called=False,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(fe),
+        )
     except Exception as exc:
         gateway_latency_ms = (time.perf_counter_ns() - gateway_start_ns) / 1_000_000
         await TelemetryService.record_request_log(
@@ -451,7 +541,7 @@ async def create_chat_completion(
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Upstream provider failure: {str(exc)}",
+            detail="An unexpected upstream error occurred.",
         )
 
     # 7. DUAL BACKFILL: Populate L1 Exact Cache + L2 Semantic Cache on Success

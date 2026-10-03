@@ -13,8 +13,14 @@ from backend.routing.models import ProviderTarget, RoutingPlan
 
 class FailingMockProvider(MockProvider):
     async def chat_completion(self, request: NormalizedInferenceRequest):
-        from fastapi import HTTPException
-        raise HTTPException(status_code=500, detail="Primary provider hardware failure")
+        from backend.providers.base import ProviderError, ProviderErrorKind
+        raise ProviderError(
+            provider=self.provider_name,
+            kind=ProviderErrorKind.UPSTREAM_UNAVAILABLE,
+            status_code=500,
+            retryable=True,
+            safe_message=f"{self.provider_name} upstream is temporarily unavailable.",
+        )
 
 
 @pytest.mark.asyncio

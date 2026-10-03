@@ -5,7 +5,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 from backend.normalization.canonicalizer import canonicalize_request
 from backend.normalization.models import NormalizedInferenceRequest
-from backend.providers.base import BaseProvider, ProviderResponse
+from backend.providers.base import BaseProvider, ProviderError, ProviderErrorKind, ProviderResponse
 from backend.streaming.sse import format_sse_chunk, format_sse_done
 
 
@@ -26,7 +26,7 @@ class MockProvider(BaseProvider):
         self.provider_name = provider_name
         self.call_count: int = 0
         self.simulated_latency_ms = simulated_latency_ms
-        self.error_mode = error_mode  # e.g., "rate_limit_429", "server_error_500", "timeout"
+        self.error_mode = error_mode  # e.g., "rate_limit_429", "server_error_500", "timeout", "auth_error_401"
         self.custom_response_text = custom_response_text
         self.fail_next_n_calls = fail_next_n_calls
         self.history: List[NormalizedInferenceRequest] = []
@@ -38,23 +38,48 @@ class MockProvider(BaseProvider):
         self.error_mode = None
         self.fail_next_n_calls = 0
 
+    def _trigger_error_for_mode(self, mode: str) -> None:
+        if mode == "rate_limit_429":
+            raise ProviderError(
+                provider=self.provider_name,
+                kind=ProviderErrorKind.RATE_LIMIT_EXCEEDED,
+                status_code=429,
+                retryable=True,
+                safe_message="Upstream rate limit exceeded (429)",
+            )
+        elif mode == "timeout":
+            raise ProviderError(
+                provider=self.provider_name,
+                kind=ProviderErrorKind.TIMEOUT,
+                status_code=504,
+                retryable=True,
+                safe_message="Upstream connection timed out",
+            )
+        elif mode == "auth_error_401":
+            raise ProviderError(
+                provider=self.provider_name,
+                kind=ProviderErrorKind.AUTHENTICATION_ERROR,
+                status_code=401,
+                retryable=False,
+                safe_message="Upstream authentication error (401)",
+            )
+        else:
+            raise ProviderError(
+                provider=self.provider_name,
+                kind=ProviderErrorKind.INTERNAL_SERVER_ERROR,
+                status_code=500,
+                retryable=True,
+                safe_message="Upstream internal server error (500)",
+            )
+
     def _check_and_trigger_error(self) -> None:
         if self.fail_next_n_calls > 0:
             self.fail_next_n_calls -= 1
             mode = self.error_mode or "server_error_500"
-            if mode == "rate_limit_429":
-                raise RuntimeError("Upstream rate limit exceeded (429)")
-            elif mode == "timeout":
-                raise asyncio.TimeoutError("Upstream connection timed out")
-            else:
-                raise RuntimeError("Upstream internal server error (500)")
+            self._trigger_error_for_mode(mode)
 
-        if self.error_mode == "rate_limit_429":
-            raise RuntimeError("Upstream rate limit exceeded (429)")
-        elif self.error_mode == "server_error_500":
-            raise RuntimeError("Upstream internal server error (500)")
-        elif self.error_mode == "timeout":
-            raise asyncio.TimeoutError("Upstream connection timed out")
+        if self.error_mode:
+            self._trigger_error_for_mode(self.error_mode)
 
     async def chat_completion(
         self, request: NormalizedInferenceRequest
