@@ -52,6 +52,15 @@ class RedisExactCache(ExactCacheBackend):
                 hosts.append((part, 26379))
         return hosts
 
+    def _normalize_redis_url(self, url: str) -> str:
+        """
+        Normalize Redis URL for TLS if ssl=True is configured.
+        redis-py determines SSLConnection from rediss:// URL scheme.
+        """
+        if self.ssl and url.startswith("redis://"):
+            return "rediss://" + url[len("redis://"):]
+        return url
+
     def _get_client(self) -> Any:
         if self._client is not None:
             return self._client
@@ -78,6 +87,8 @@ class RedisExactCache(ExactCacheBackend):
             except Exception as exc:
                 logger.warning("Failed to initialize Redis Sentinel: %s, falling back to standalone URL", exc)
 
+        normalized_url = self._normalize_redis_url(self.redis_url)
+
         if self.cluster_mode:
             try:
                 from redis.asyncio.cluster import RedisCluster
@@ -89,10 +100,8 @@ class RedisExactCache(ExactCacheBackend):
                     cluster_kwargs["max_connections"] = self.max_connections
                 if self.password:
                     cluster_kwargs["password"] = self.password
-                if self.ssl:
-                    cluster_kwargs["ssl"] = True
                 self._client = RedisCluster.from_url(
-                    self.redis_url,
+                    normalized_url,
                     **cluster_kwargs,
                 )
                 logger.info("Initialized Redis Cluster client")
@@ -109,11 +118,9 @@ class RedisExactCache(ExactCacheBackend):
             client_kwargs["max_connections"] = self.max_connections
         if self.password:
             client_kwargs["password"] = self.password
-        if self.ssl:
-            client_kwargs["ssl"] = True
 
         self._client = redis.from_url(
-            self.redis_url,
+            normalized_url,
             **client_kwargs,
         )
         return self._client
