@@ -1,276 +1,228 @@
 #!/usr/bin/env python3
 """
-CacheMind Full System Live Verification & Smoke Test Suite.
-Verifies all 6 phases and core gateway functionality in real-time:
-1. Health & Readiness
-2. Cold Cache Miss & LLM Dispatch
-3. L1 Exact Cache Hit (< 2ms)
-4. L2 Semantic Vector Cache Hit (< 10ms)
-5. PII Masking & Sensitive Data Protection
-6. Cache Lifecycle (Inspection, Single-Key Deletion, Scoped Purge, Pre-Warming)
-7. Multi-Tenant Admin API (Tenant, Project, Key Creation, Scoped Revocation)
-8. FinOps Analytics & Cost Savings Reporting
+CacheMind External HTTP Runtime Smoke Verification Suite.
+
+Exercises the live gateway over HTTP to verify:
+  Phase A: Liveness probe (/health/live)
+  Phase B: Readiness probe and component health (/health/ready)
+  Phase C: User signup & workspace provisioning (/v1/auth/signup)
+  Phase D: Session cookie verification (/v1/auth/me)
+  Phase E: API key generation (/v1/auth/keys)
+  Phase F: Cold cache miss & hash computation (/v1/chat/completions)
+  Phase G: L1 exact cache hit verification (/v1/chat/completions)
+  Phase H: Ingress PII masking before provider dispatch
+  Phase I: API key revocation and inference rejection
+  Phase J: Session logout and invalidation
+  Phase K: Verification summary report
 """
 
 import asyncio
-import json
-import time
-from typing import Any, Dict
+import os
+import sys
+import uuid
 import httpx
 
-from backend.app.config import settings
-from backend.app.main import app, lifespan
 
-DEV_KEY = settings.DEV_API_KEY
+async def run_smoke_verification() -> None:
+    base_url = os.getenv("CACHEMIND_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+    timeout = float(os.getenv("SMOKE_TIMEOUT_SECONDS", "30.0"))
+    smoke_id = uuid.uuid4().hex[:8]
 
+    test_email = f"runtime-smoke-{smoke_id}@cachemind.local"
+    test_password = "RuntimeSmokePassword123!"
 
-async def run_live_verification():
-    print("=" * 80)
-    print(" 🧪 CACHEMIND SYSTEM VERIFICATION & SMOKE TEST")
-    print("=" * 80)
+    print("=" * 70)
+    print(f" CacheMind Runtime Smoke Verification | Target: {base_url}")
+    print("=" * 70)
 
-    async with lifespan(app):
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://testserver", timeout=30.0) as client:
-            auth_headers = {
-                "Authorization": f"Bearer {DEV_KEY}",
-                "Content-Type": "application/json",
-            }
+    # Use httpx.AsyncClient with cookie persistence for session workflows
+    async with httpx.AsyncClient(base_url=base_url, timeout=timeout, follow_redirects=True) as client:
+        # -------------------------------------------------------------
+        # Phase A: Liveness
+        # -------------------------------------------------------------
+        res = await client.get("/health/live")
+        if res.status_code != 200:
+            sys.exit(f"Phase A FAILED: /health/live returned HTTP {res.status_code}: {res.text}")
+        live_data = res.json()
+        if live_data.get("probe") != "liveness":
+            sys.exit(f"Phase A FAILED: expected probe=='liveness', got: {live_data}")
+        print("[PASS] Phase A: Liveness probe healthy (/health/live)")
 
-            # -------------------------------------------------------------
-            # 1. Health Check
-            # -------------------------------------------------------------
-            print("\n[Test 1] Health & System Status Endpoint...")
-            res = await client.get("/health")
-            assert res.status_code == 200, f"Health check failed: {res.text}"
-            health_data = res.json()
-            print(f"  ✅ Health Check: {res.status_code} OK | Status: {health_data.get('status')}")
+        # -------------------------------------------------------------
+        # Phase B: Readiness
+        # -------------------------------------------------------------
+        res = await client.get("/health/ready")
+        if res.status_code != 200:
+            sys.exit(f"Phase B FAILED: /health/ready returned HTTP {res.status_code}: {res.text}")
+        ready_data = res.json()
+        if ready_data.get("status") != "ready":
+            sys.exit(f"Phase B FAILED: expected status=='ready', got: {ready_data}")
 
-            # -------------------------------------------------------------
-            # 2. Cold Miss -> Upstream Provider Dispatch
-            # -------------------------------------------------------------
-            print("\n[Test 2] Cold Cache Miss (First-time Request)...")
-            prompt_1 = "Explain the advantages of asynchronous I/O in Python."
-            req_payload = {
-                "model": "gpt-4o",
-                "messages": [{"role": "user", "content": prompt_1}],
-                "temperature": 0.0,
-            }
+        components = ready_data.get("components", {})
+        for comp_name in ("database", "cache_backend", "semantic_backend", "embedding_engine"):
+            comp_status = components.get(comp_name, {}).get("status")
+            if comp_status != "healthy":
+                sys.exit(f"Phase B FAILED: component '{comp_name}' is not healthy (status: {comp_status})")
+        print("[PASS] Phase B: Readiness probe healthy with core components operational (/health/ready)")
 
-            start = time.perf_counter_ns()
-            res_cold = await client.post("/v1/chat/completions", json=req_payload, headers=auth_headers)
-            cold_latency_ms = (time.perf_counter_ns() - start) / 1_000_000.0
+        # -------------------------------------------------------------
+        # Phase C: User Signup
+        # -------------------------------------------------------------
+        signup_payload = {
+            "email": test_email,
+            "password": test_password,
+            "full_name": "Runtime Smoke Tester",
+            "workspace_name": f"Smoke Workspace {smoke_id}",
+        }
+        res = await client.post("/v1/auth/signup", json=signup_payload)
+        if res.status_code != 201:
+            sys.exit(f"Phase C FAILED: /v1/auth/signup returned HTTP {res.status_code}: {res.text}")
+        signup_data = res.json()
 
-            assert res_cold.status_code == 200, f"Cold request failed: {res_cold.text}"
-            cold_status = res_cold.headers.get("X-CacheMind-Status")
-            cold_hash = res_cold.headers.get("X-CacheMind-Exact-Hash")
-            cold_data = res_cold.json()
-            response_text = cold_data["choices"][0]["message"]["content"]
+        active_project = signup_data.get("active_project")
+        if not active_project or not active_project.get("id"):
+            sys.exit(f"Phase C FAILED: missing active_project in signup response: {signup_data}")
+        project_id = active_project["id"]
+        print(f"[PASS] Phase C: User registered and default workspace/project provisioned (project_id: {project_id})")
 
-            print(f"  ✅ Status Code:    {res_cold.status_code}")
-            print(f"  ✅ Cache Status:   {cold_status} (Expected: MISS)")
-            print(f"  ✅ Latency:        {cold_latency_ms:.2f} ms")
-            print(f"  ✅ Exact Hash:     {cold_hash}")
-            print(f"  ✅ Response Text:  {response_text[:60]}...")
+        # -------------------------------------------------------------
+        # Phase D: Session Verification
+        # -------------------------------------------------------------
+        res = await client.get("/v1/auth/me")
+        if res.status_code != 200:
+            sys.exit(f"Phase D FAILED: /v1/auth/me returned HTTP {res.status_code}: {res.text}")
+        me_data = res.json()
+        user_info = me_data.get("user", {})
+        if user_info.get("email") != test_email:
+            sys.exit(f"Phase D FAILED: email mismatch in /v1/auth/me: expected {test_email}, got {user_info.get('email')}")
+        print("[PASS] Phase D: Session verified via HttpOnly cookie (/v1/auth/me)")
 
-            assert cold_status == "MISS", f"Expected MISS but got {cold_status}"
+        # -------------------------------------------------------------
+        # Phase E: Create Project API Key
+        # -------------------------------------------------------------
+        key_payload = {
+            "project_id": project_id,
+            "name": f"Runtime Smoke Key {smoke_id}",
+            "role": "inference",
+        }
+        res = await client.post("/v1/auth/keys", json=key_payload)
+        if res.status_code != 201:
+            sys.exit(f"Phase E FAILED: /v1/auth/keys returned HTTP {res.status_code}: {res.text}")
+        key_data = res.json()
 
-            # -------------------------------------------------------------
-            # 3. L1 Exact Cache Hit
-            # -------------------------------------------------------------
-            print("\n[Test 3] L1 Exact Cache Hit (Identical Prompt)...")
-            start = time.perf_counter_ns()
-            res_exact = await client.post("/v1/chat/completions", json=req_payload, headers=auth_headers)
-            exact_latency_ms = (time.perf_counter_ns() - start) / 1_000_000.0
+        raw_key = key_data.get("raw_key")
+        key_id = key_data.get("id")
+        if not raw_key or not key_id:
+            sys.exit("Phase E FAILED: /v1/auth/keys response missing raw_key or id")
+        key_prefix = key_data.get("key_prefix", "cm_...")
+        print(f"[PASS] Phase E: Project API key generated (key_prefix: {key_prefix}, key_id: {key_id})")
 
-            assert res_exact.status_code == 200
-            exact_status = res_exact.headers.get("X-CacheMind-Status")
-            exact_hash = res_exact.headers.get("X-CacheMind-Exact-Hash")
+        # Bearer client for inference requests
+        chat_headers = {
+            "Authorization": f"Bearer {raw_key}",
+            "Content-Type": "application/json",
+        }
 
-            print(f"  ✅ Status Code:    {res_exact.status_code}")
-            print(f"  ✅ Cache Status:   {exact_status} (Expected: EXACT_HIT)")
-            print(f"  ✅ Latency:        {exact_latency_ms:.2f} ms (Target: < 2.5ms)")
-            print(f"  ✅ Exact Hash:     {exact_hash}")
+        # -------------------------------------------------------------
+        # Phase F: Cold Cache Miss
+        # -------------------------------------------------------------
+        unique_prompt = f"CacheMind runtime smoke request {smoke_id}"
+        chat_payload = {
+            "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": unique_prompt}],
+            "temperature": 0.0,
+        }
+        res_cold = await client.post("/v1/chat/completions", json=chat_payload, headers=chat_headers)
+        if res_cold.status_code != 200:
+            sys.exit(f"Phase F FAILED: /v1/chat/completions returned HTTP {res_cold.status_code}: {res_cold.text}")
 
-            assert exact_status == "EXACT_HIT", f"Expected EXACT_HIT but got {exact_status}"
-            assert exact_hash == cold_hash, "Hash mismatch on exact hit"
+        cold_status = res_cold.headers.get("X-CacheMind-Status")
+        cold_hash = res_cold.headers.get("X-CacheMind-Exact-Hash")
+        if cold_status != "MISS":
+            sys.exit(f"Phase F FAILED: expected X-CacheMind-Status=='MISS', got: '{cold_status}'")
+        if not cold_hash:
+            sys.exit("Phase F FAILED: missing X-CacheMind-Exact-Hash header in response")
 
-            # -------------------------------------------------------------
-            # 4. L2 Semantic Vector Cache Hit
-            # -------------------------------------------------------------
-            print("\n[Test 4] L2 Semantic Vector Cache Hit (Paraphrased Prompt)...")
-            from backend.semantic.factory import get_semantic_cache_service
-            sem_service = get_semantic_cache_service()
-            if hasattr(sem_service.embedding_engine, "register_similar"):
-                sem_service.embedding_engine.register_similar(prompt_1, "What are the benefits of using async I/O in Python?", 0.96)
+        cold_body = res_cold.json()
+        cold_content = cold_body["choices"][0]["message"]["content"]
+        print(f"[PASS] Phase F: Cold cache miss verified (status: MISS, hash: {cold_hash})")
 
-            paraphrased_prompt = "What are the benefits of using async I/O in Python?"
-            sem_payload = {
-                "model": "gpt-4o",
-                "messages": [{"role": "user", "content": paraphrased_prompt}],
-                "temperature": 0.0,
-            }
+        # -------------------------------------------------------------
+        # Phase G: L1 Exact Cache Hit
+        # -------------------------------------------------------------
+        res_exact = await client.post("/v1/chat/completions", json=chat_payload, headers=chat_headers)
+        if res_exact.status_code != 200:
+            sys.exit(f"Phase G FAILED: /v1/chat/completions returned HTTP {res_exact.status_code}: {res_exact.text}")
 
-            start = time.perf_counter_ns()
-            res_sem = await client.post("/v1/chat/completions", json=sem_payload, headers=auth_headers)
-            sem_latency_ms = (time.perf_counter_ns() - start) / 1_000_000.0
+        exact_status = res_exact.headers.get("X-CacheMind-Status")
+        exact_hash = res_exact.headers.get("X-CacheMind-Exact-Hash")
+        if exact_status != "EXACT_HIT":
+            sys.exit(f"Phase G FAILED: expected X-CacheMind-Status=='EXACT_HIT', got: '{exact_status}'")
+        if exact_hash != cold_hash:
+            sys.exit(f"Phase G FAILED: exact hash mismatch: '{exact_hash}' != '{cold_hash}'")
 
-            assert res_sem.status_code == 200
-            sem_status = res_sem.headers.get("X-CacheMind-Status")
-            sem_score = res_sem.headers.get("X-CacheMind-Similarity") or res_sem.headers.get("X-CacheMind-Semantic-Score")
+        exact_body = res_exact.json()
+        exact_content = exact_body["choices"][0]["message"]["content"]
+        if exact_content != cold_content:
+            sys.exit("Phase G FAILED: response content mismatch between cold miss and exact hit")
+        print("[PASS] Phase G: L1 exact cache hit verified (status: EXACT_HIT, hash preserved)")
 
-            print(f"  ✅ Status Code:    {res_sem.status_code}")
-            print(f"  ✅ Cache Status:   {sem_status} (Expected: L2_HIT)")
-            print(f"  ✅ Similarity:     {sem_score}")
-            print(f"  ✅ Latency:        {sem_latency_ms:.2f} ms (Target: < 12.0ms)")
+        # -------------------------------------------------------------
+        # Phase H: Ingress PII Sanitization
+        # -------------------------------------------------------------
+        synthetic_email = f"smoke.user.{smoke_id}@example-corp.com"
+        synthetic_secret = f"cm_sec_smoke_test_secret_key_{smoke_id}00000000"
+        pii_prompt = f"Contact {synthetic_email} with access key {synthetic_secret} for smoke run {smoke_id}."
 
-            assert sem_status in ("L2_HIT", "SEMANTIC_HIT"), f"Expected L2_HIT/SEMANTIC_HIT but got {sem_status}"
+        pii_payload = {
+            "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": pii_prompt}],
+            "temperature": 0.0,
+        }
+        res_pii = await client.post("/v1/chat/completions", json=pii_payload, headers=chat_headers)
+        if res_pii.status_code != 200:
+            sys.exit(f"Phase H FAILED: /v1/chat/completions returned HTTP {res_pii.status_code}: {res_pii.text}")
 
-            # -------------------------------------------------------------
-            # 5. Ingress PII Sanitization
-            # -------------------------------------------------------------
-            print("\n[Test 5] Ingress PII Sanitization (Redacting Sensitive Entities)...")
-            pii_prompt = "Contact support at alice@example-corp.com or call +1 555-123-4567 for account 123-45-6789."
-            pii_payload = {
-                "model": "gpt-4o",
-                "messages": [{"role": "user", "content": pii_prompt}],
-            }
-            res_pii = await client.post("/v1/chat/completions", json=pii_payload, headers=auth_headers)
-            assert res_pii.status_code == 200
-            pii_hash = res_pii.headers.get("X-CacheMind-Exact-Hash")
-            print(f"  ✅ PII Prompt Processed | Generated Exact Hash: {pii_hash}")
+        pii_content = res_pii.json()["choices"][0]["message"]["content"]
+        if synthetic_email in pii_content:
+            sys.exit("Phase H FAILED: raw synthetic email leaked in provider response")
+        if synthetic_secret in pii_content:
+            sys.exit("Phase H FAILED: raw synthetic secret leaked in provider response")
+        if "[REDACTED_EMAIL]" not in pii_content:
+            sys.exit("Phase H FAILED: missing [REDACTED_EMAIL] token in response")
+        if "[REDACTED_SECRET]" not in pii_content:
+            sys.exit("Phase H FAILED: missing [REDACTED_SECRET] token in response")
+        print("[PASS] Phase H: Ingress PII sanitization verified before provider dispatch ([REDACTED_EMAIL], [REDACTED_SECRET])")
 
-            # Inspect cache key to verify PII was masked before caching
-            res_inspect = await client.get(f"/v1/cache/inspect/{pii_hash}", headers=auth_headers)
-            assert res_inspect.status_code == 200
-            inspect_data = res_inspect.json()
-            print(f"  ✅ Cache Key Exists: {inspect_data.get('exists')}")
+        # -------------------------------------------------------------
+        # Phase I: API Key Revocation
+        # -------------------------------------------------------------
+        res_revoke = await client.delete(f"/v1/auth/keys/{key_id}")
+        if res_revoke.status_code != 200:
+            sys.exit(f"Phase I FAILED: /v1/auth/keys/{key_id} returned HTTP {res_revoke.status_code}: {res_revoke.text}")
 
-            # -------------------------------------------------------------
-            # 6. Cache Pre-Warming / Seeding
-            # -------------------------------------------------------------
-            print("\n[Test 6] Cache Pre-Warming Engine (Batch Seeding)...")
-            warm_payload = {
-                "items": [
-                    {
-                        "prompt": "What is CacheMind?",
-                        "response": "CacheMind is an enterprise-grade AI semantic caching gateway.",
-                        "model": "gpt-4o",
-                        "tags": ["docs", "overview"],
-                        "namespace": "knowledge_base",
-                        "temperature": 0.0,
-                    },
-                    {
-                        "prompt": "How fast is L1 exact caching?",
-                        "response": "L1 exact caching serves responses in under 2 milliseconds.",
-                        "model": "gpt-4o",
-                        "temperature": 0.0,
-                    },
-                ]
-            }
-            res_warm = await client.post("/v1/cache/warm", json=warm_payload, headers=auth_headers)
-            assert res_warm.status_code == 200
-            warm_res = res_warm.json()
-            print(f"  ✅ Total Items:     {warm_res.get('total_items')}")
-            print(f"  ✅ Exact Seeded:    {warm_res.get('exact_seeded')}")
-            print(f"  ✅ Semantic Seeded: {warm_res.get('semantic_seeded')}")
+        # Retry inference with revoked key -> Must return 401 Unauthorized
+        res_revoked_chat = await client.post("/v1/chat/completions", json=chat_payload, headers=chat_headers)
+        if res_revoked_chat.status_code != 401:
+            sys.exit(f"Phase I FAILED: expected HTTP 401 for revoked key, got: {res_revoked_chat.status_code}")
+        print(f"[PASS] Phase I: API key revoked (key_id: {key_id}) and rejected on inference (HTTP 401)")
 
-            # Test instant hit on pre-warmed prompt
-            res_warm_hit = await client.post(
-                "/v1/chat/completions",
-                json={
-                    "model": "gpt-4o",
-                    "messages": [{"role": "user", "content": "What is CacheMind?"}],
-                    "tags": ["docs", "overview"],
-                    "namespace": "knowledge_base",
-                    "temperature": 0.0,
-                },
-                headers=auth_headers,
-            )
-            assert res_warm_hit.status_code == 200
-            warm_hit_status = res_warm_hit.headers.get("X-CacheMind-Status")
-            print(f"  ✅ Pre-warmed Query Status: {warm_hit_status} (Expected: EXACT_HIT)")
-            assert warm_hit_status == "EXACT_HIT", f"Expected EXACT_HIT on seeded prompt, got {warm_hit_status}"
+        # -------------------------------------------------------------
+        # Phase J: Session Logout & Invalidation
+        # -------------------------------------------------------------
+        res_logout = await client.post("/v1/auth/logout")
+        if res_logout.status_code != 200:
+            sys.exit(f"Phase J FAILED: /v1/auth/logout returned HTTP {res_logout.status_code}: {res_logout.text}")
 
-            # -------------------------------------------------------------
-            # 7. Multi-Tenant Admin API Lifecycle
-            # -------------------------------------------------------------
-            print("\n[Test 7] Multi-Tenant Admin API Lifecycle...")
-            # A. Create Tenant
-            res_tenant = await client.post(
-                "/v1/admin/tenants",
-                json={"name": "Acme Corp"},
-                headers=auth_headers,
-            )
-            assert res_tenant.status_code in (200, 201), f"Tenant creation failed: {res_tenant.text}"
-            tenant_data = res_tenant.json()
-            tenant_id = tenant_data["id"]
-            print(f"  ✅ Created Tenant:  {tenant_data['name']} (ID: {tenant_id})")
+        res_me_logged_out = await client.get("/v1/auth/me")
+        if res_me_logged_out.status_code != 401:
+            sys.exit(f"Phase J FAILED: expected HTTP 401 after logout, got: {res_me_logged_out.status_code}")
+        print("[PASS] Phase J: Session logged out and invalidated (HTTP 401 on /v1/auth/me)")
 
-            # B. Create Project
-            res_proj = await client.post(
-                "/v1/admin/projects",
-                json={"tenant_id": tenant_id, "name": "Production App"},
-                headers=auth_headers,
-            )
-            assert res_proj.status_code in (200, 201), f"Project creation failed: {res_proj.text}"
-            proj_data = res_proj.json()
-            proj_id = proj_data["id"]
-            print(f"  ✅ Created Project: {proj_data['name']} (ID: {proj_id})")
-
-            # C. Generate New API Key
-            res_key = await client.post(
-                "/v1/admin/keys",
-                json={"project_id": proj_id, "name": "Prod Ingress Key", "role": "inference"},
-                headers=auth_headers,
-            )
-            assert res_key.status_code in (200, 201), f"Key generation failed: {res_key.text}"
-            key_data = res_key.json()
-            raw_key = key_data["raw_api_key"]
-            key_id = key_data["id"]
-            print(f"  ✅ Generated API Key: {key_data['key_prefix']}... (Role: {key_data['role']})")
-
-            # D. Test inference with newly created key
-            new_key_headers = {"Authorization": f"Bearer {raw_key}", "Content-Type": "application/json"}
-            res_new_key = await client.post(
-                "/v1/chat/completions",
-                json={"model": "gpt-4o", "messages": [{"role": "user", "content": "Test new tenant key"}]},
-                headers=new_key_headers,
-            )
-            assert res_new_key.status_code == 200
-            print(f"  ✅ Inference Auth via New Key: {res_new_key.status_code} OK (Status: {res_new_key.headers.get('X-CacheMind-Status')})")
-
-            # E. Revoke Key
-            res_revoke = await client.delete(f"/v1/admin/keys/{key_id}", headers=auth_headers)
-            assert res_revoke.status_code == 200
-            print(f"  ✅ Key Revoked: {key_id}")
-
-            # F. Verify Revoked Key Fails Auth
-            res_revoked_auth = await client.post(
-                "/v1/chat/completions",
-                json={"model": "gpt-4o", "messages": [{"role": "user", "content": "Should fail"}]},
-                headers=new_key_headers,
-            )
-            assert res_revoked_auth.status_code == 401
-            print(f"  ✅ Revoked Key Rejected: {res_revoked_auth.status_code} Unauthorized (As Expected)")
-
-            # -------------------------------------------------------------
-            # 8. FinOps Analytics & Cost Savings
-            # -------------------------------------------------------------
-            print("\n[Test 8] FinOps Analytics & Cost Savings Reporting...")
-            res_analytics = await client.get("/v1/analytics/overview", headers=auth_headers)
-            assert res_analytics.status_code == 200
-            analytics_data = res_analytics.json()
-            print(f"  ✅ Total Requests:       {analytics_data.get('total_requests')}")
-            print(f"  ✅ Cache Hit Rate:       {analytics_data.get('hit_rate_pct', 0.0):.1f}%")
-            print(f"  ✅ Exact Hits:           {analytics_data.get('exact_hits')}")
-            print(f"  ✅ Semantic Hits:        {analytics_data.get('semantic_hits')}")
-            print(f"  ✅ Estimated Cost Saved: ${analytics_data.get('estimated_cost_saved_usd', 0.0):.4f}")
-
-    print("\n" + "=" * 80)
-    print(" 🎉 ALL 8 LIVE SYSTEM VERIFICATION TESTS PASSED SUCCESSFULLY!")
-    print("=" * 80 + "\n")
+    print("=" * 70)
+    print("CacheMind runtime smoke verification PASSED")
+    print("=" * 70)
 
 
 if __name__ == "__main__":
-    asyncio.run(run_live_verification())
+    asyncio.run(run_smoke_verification())
