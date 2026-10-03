@@ -4,9 +4,10 @@ from typing import AsyncIterator, List, Optional
 from fastapi import HTTPException, status
 import httpx
 
+from backend.app.config import settings
 from backend.normalization.models import NormalizedInferenceRequest
+from backend.providers.base import ProviderError
 from backend.providers.registry import ProviderRegistry, get_provider_registry
-from backend.providers.registry import ProviderConfigurationError
 from backend.resilience.circuit_breaker import (
     CircuitBreakerRegistry,
     get_circuit_breaker_registry,
@@ -19,6 +20,41 @@ from backend.routing.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def is_plain_text_compatible(request: NormalizedInferenceRequest) -> bool:
+    """
+    Determines whether a normalized request is strictly plain-text compatible.
+    Denies cross-provider fallback if tools, tool_choice, provider options,
+    structured output (response_format), or multimodal payloads are present.
+    """
+    if request.tools:
+        return False
+    if request.tool_choice is not None:
+        return False
+    if request.provider_options:
+        return False
+    if request.response_format:
+        return False
+    if request.attachment_hashes:
+        return False
+
+    for msg in request.messages:
+        if msg.role in ("tool", "function"):
+            return False
+        if msg.tool_calls:
+            return False
+        if msg.tool_call_id is not None:
+            return False
+        if isinstance(msg.content, list):
+            for part in msg.content:
+                if isinstance(part, dict):
+                    if part.get("type") != "text":
+                        return False
+                elif not isinstance(part, str):
+                    return False
+
+    return True
 
 
 class RoutingEngine:
@@ -39,27 +75,35 @@ class RoutingEngine:
     def build_routing_plan(self, request: NormalizedInferenceRequest) -> RoutingPlan:
         """
         Constructs the primary target and ordered fallback targets for a request.
+        Cross-provider fallback is only allowed when explicitly permitted,
+        the request is plain-text compatible, and a fallback model is configured.
         """
         primary_provider = self.provider_registry.resolve_provider_for_model(request.model)
         primary_target = ProviderTarget(provider=primary_provider, model=request.model)
 
         fallbacks: List[ProviderTarget] = []
 
-        # Construct cross-provider fallback matrix (NO mock targets in production)
-        if primary_provider == "openai":
-            fallbacks.append(ProviderTarget(provider="anthropic", model="claude-3-5-sonnet-20241022"))
-            fallbacks.append(ProviderTarget(provider="ollama", model="llama3"))
-        elif primary_provider == "anthropic":
-            fallbacks.append(ProviderTarget(provider="openai", model="gpt-4o"))
-            fallbacks.append(ProviderTarget(provider="ollama", model="llama3"))
-        elif primary_provider == "ollama":
-            fallbacks.append(ProviderTarget(provider="openai", model="gpt-4o-mini"))
-            fallbacks.append(ProviderTarget(provider="anthropic", model="claude-3-5-sonnet-20241022"))
-        # No fallback targets added for mock/unknown primary providers
-
-        # Fallback is disabled by default; only enabled when explicitly allowed
-        if not getattr(request, "allow_provider_fallback", False):
-            fallbacks = []
+        # Safe Capability-Gated Fallback
+        if getattr(request, "allow_provider_fallback", False) and is_plain_text_compatible(request):
+            if primary_provider == "openai":
+                if settings.ANTHROPIC_FALLBACK_MODEL:
+                    fallbacks.append(
+                        ProviderTarget(provider="anthropic", model=settings.ANTHROPIC_FALLBACK_MODEL)
+                    )
+            elif primary_provider == "anthropic":
+                if settings.OPENAI_FALLBACK_MODEL:
+                    fallbacks.append(
+                        ProviderTarget(provider="openai", model=settings.OPENAI_FALLBACK_MODEL)
+                    )
+            elif primary_provider == "ollama":
+                if settings.OPENAI_FALLBACK_MODEL:
+                    fallbacks.append(
+                        ProviderTarget(provider="openai", model=settings.OPENAI_FALLBACK_MODEL)
+                    )
+                if settings.ANTHROPIC_FALLBACK_MODEL:
+                    fallbacks.append(
+                        ProviderTarget(provider="anthropic", model=settings.ANTHROPIC_FALLBACK_MODEL)
+                    )
 
         return RoutingPlan(primary=primary_target, fallbacks=fallbacks)
 
@@ -74,13 +118,12 @@ class RoutingEngine:
 
     def _is_retryable_error(self, exc: Exception) -> bool:
         """Determines whether an exception warrants attempting a fallback provider."""
+        if isinstance(exc, ProviderError):
+            return exc.retryable
         if isinstance(exc, (asyncio.TimeoutError, TimeoutError, httpx.TimeoutException, httpx.RequestError)):
             return True
         if isinstance(exc, HTTPException):
             return exc.status_code in (429, 500, 502, 503, 504)
-        if isinstance(exc, RuntimeError):
-            err_str = str(exc).lower()
-            return any(k in err_str for k in ("429", "500", "502", "503", "504", "rate limit", "timeout", "server error"))
         return False
 
     async def execute(
@@ -142,9 +185,8 @@ class RoutingEngine:
                 logger.warning(err_msg)
                 errors_encountered.append(err_msg)
 
-                if not self._is_retryable_error(exc) and hop_index == 0 and not isinstance(exc, (HTTPException, RuntimeError)):
-                    # Non-retryable error on primary target (e.g. client validation error)
-                    raise
+                if not self._is_retryable_error(exc) and hop_index == 0:
+                    raise exc
 
                 continue
 
@@ -234,6 +276,10 @@ class RoutingEngine:
                 err_msg = f"Streaming provider '{target.provider}' failed to start: {str(exc)}"
                 logger.warning(err_msg)
                 errors_encountered.append(err_msg)
+
+                if not self._is_retryable_error(exc) and hop_index == 0:
+                    raise exc
+
                 continue
 
         logger.error(

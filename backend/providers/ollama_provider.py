@@ -1,12 +1,43 @@
 import json
+import logging
 import time
 from typing import Any, AsyncIterator, Dict, List, Optional
 import httpx
 
 from backend.app.config import settings
 from backend.normalization.models import NormalizedInferenceRequest
-from backend.providers.base import BaseProvider, ProviderResponse
+from backend.providers.base import BaseProvider, ProviderError, ProviderErrorKind, ProviderResponse
 from backend.streaming.sse import format_sse_chunk, format_sse_done
+
+logger = logging.getLogger(__name__)
+
+
+def _normalize_ollama_error(status_code: int, body_text: str) -> ProviderError:
+    safe_msg = f"Ollama upstream returned HTTP {status_code}."
+    try:
+        data = json.loads(body_text)
+        if isinstance(data, dict) and "error" in data:
+            safe_msg = f"Ollama error: {data['error']}"
+    except Exception:
+        pass
+
+    if status_code == 404:
+        kind = ProviderErrorKind.NOT_FOUND
+        retryable = False
+    elif status_code in (500, 502, 503, 504):
+        kind = ProviderErrorKind.UPSTREAM_UNAVAILABLE if status_code != 500 else ProviderErrorKind.INTERNAL_SERVER_ERROR
+        retryable = True
+    else:
+        kind = ProviderErrorKind.UNKNOWN
+        retryable = (status_code >= 500)
+
+    return ProviderError(
+        provider="ollama",
+        kind=kind,
+        status_code=status_code,
+        retryable=retryable,
+        safe_message=safe_msg,
+    )
 
 
 class OllamaProvider(BaseProvider):
@@ -70,53 +101,73 @@ class OllamaProvider(BaseProvider):
         start_time = time.perf_counter_ns()
         payload = self._transform_request_payload(request, stream=False)
 
-        response = await self._client.post(
-            "/api/chat",
-            json=payload,
-        )
-
-        if response.status_code != 200:
-            raise RuntimeError(
-                f"Ollama error ({response.status_code}): {response.text}"
+        try:
+            response = await self._client.post(
+                "/api/chat",
+                json=payload,
             )
+            duration_ms = (time.perf_counter_ns() - start_time) / 1_000_000
 
-        data = response.json()
-        duration_ms = (time.perf_counter_ns() - start_time) / 1_000_000
+            if response.status_code != 200:
+                err = _normalize_ollama_error(response.status_code, response.text)
+                logger.error("Ollama upstream error: status=%d kind=%s msg=%s", response.status_code, err.kind.value, err.safe_message)
+                raise err
 
-        msg = data.get("message", {})
-        text_content = msg.get("content", "")
-        input_tokens = data.get("prompt_eval_count", 0)
-        output_tokens = data.get("eval_count", 0)
+            data = response.json()
+            msg = data.get("message", {})
+            text_content = msg.get("content", "")
+            input_tokens = data.get("prompt_eval_count", 0)
+            output_tokens = data.get("eval_count", 0)
 
-        openai_response: Dict[str, Any] = {
-            "id": f"chatcmpl-ollama-{int(time.time())}",
-            "object": "chat.completion",
-            "created": int(time.time()),
-            "model": data.get("model", request.model),
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {
-                        "role": msg.get("role", "assistant"),
-                        "content": text_content,
-                    },
-                    "finish_reason": "stop",
-                }
-            ],
-            "usage": {
-                "prompt_tokens": input_tokens,
-                "completion_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens,
-            },
-        }
+            openai_response: Dict[str, Any] = {
+                "id": f"chatcmpl-ollama-{int(time.time())}",
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": data.get("model", request.model),
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": msg.get("role", "assistant"),
+                            "content": text_content,
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": input_tokens,
+                    "completion_tokens": output_tokens,
+                    "total_tokens": input_tokens + output_tokens,
+                },
+            }
 
-        return ProviderResponse(
-            raw_response=openai_response,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            model=data.get("model", request.model),
-            provider_latency_ms=duration_ms,
-        )
+            return ProviderResponse(
+                raw_response=openai_response,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                model=data.get("model", request.model),
+                provider_latency_ms=duration_ms,
+            )
+        except httpx.TimeoutException as exc:
+            duration_ms = (time.perf_counter_ns() - start_time) / 1_000_000
+            logger.error("Ollama upstream timeout after %.2fms", duration_ms)
+            raise ProviderError(
+                provider="ollama",
+                kind=ProviderErrorKind.TIMEOUT,
+                status_code=504,
+                retryable=True,
+                safe_message="Ollama upstream request timed out.",
+            ) from exc
+        except httpx.RequestError as exc:
+            duration_ms = (time.perf_counter_ns() - start_time) / 1_000_000
+            logger.error("Ollama upstream network error: %s", exc)
+            raise ProviderError(
+                provider="ollama",
+                kind=ProviderErrorKind.NETWORK_ERROR,
+                status_code=502,
+                retryable=True,
+                safe_message=f"Network error communicating with Ollama: {type(exc).__name__}",
+            ) from exc
 
     async def chat_completion_stream(
         self, request: NormalizedInferenceRequest
@@ -135,46 +186,65 @@ class OllamaProvider(BaseProvider):
             created=created,
         )
 
-        async with self._client.stream("POST", "/api/chat", json=payload) as response:
-            if response.status_code != 200:
-                err_body = await response.aread()
-                raise RuntimeError(
-                    f"Ollama streaming error ({response.status_code}): {err_body.decode('utf-8', errors='ignore')}"
-                )
+        try:
+            async with self._client.stream("POST", "/api/chat", json=payload) as response:
+                if response.status_code != 200:
+                    err_body = await response.aread()
+                    err = _normalize_ollama_error(response.status_code, err_body.decode("utf-8", errors="ignore"))
+                    logger.error("Ollama upstream stream error: status=%d kind=%s msg=%s", response.status_code, err.kind.value, err.safe_message)
+                    raise err
 
-            async for line in response.aiter_lines():
-                line = line.strip()
-                if not line:
-                    continue
+                async for line in response.aiter_lines():
+                    line = line.strip()
+                    if not line:
+                        continue
 
-                try:
-                    data = json.loads(line)
-                except Exception:
-                    continue
+                    try:
+                        data = json.loads(line)
+                    except Exception:
+                        continue
 
-                content = data.get("message", {}).get("content", "")
-                if content:
-                    yield format_sse_chunk(
-                        request_id=request_id,
-                        model=model_name,
-                        content=content,
-                        created=created,
-                    )
+                    content = data.get("message", {}).get("content", "")
+                    if content:
+                        yield format_sse_chunk(
+                            request_id=request_id,
+                            model=model_name,
+                            content=content,
+                            created=created,
+                        )
 
-                if data.get("done", False):
-                    input_tokens = data.get("prompt_eval_count", 0)
-                    output_tokens = data.get("eval_count", 0)
-                    yield format_sse_chunk(
-                        request_id=request_id,
-                        model=model_name,
-                        finish_reason="stop",
-                        usage={
-                            "prompt_tokens": input_tokens,
-                            "completion_tokens": output_tokens,
-                            "total_tokens": input_tokens + output_tokens,
-                        },
-                        created=created,
-                    )
+                    if data.get("done", False):
+                        input_tokens = data.get("prompt_eval_count", 0)
+                        output_tokens = data.get("eval_count", 0)
+                        yield format_sse_chunk(
+                            request_id=request_id,
+                            model=model_name,
+                            finish_reason="stop",
+                            usage={
+                                "prompt_tokens": input_tokens,
+                                "completion_tokens": output_tokens,
+                                "total_tokens": input_tokens + output_tokens,
+                            },
+                            created=created,
+                        )
+        except httpx.TimeoutException as exc:
+            logger.error("Ollama upstream stream timeout")
+            raise ProviderError(
+                provider="ollama",
+                kind=ProviderErrorKind.TIMEOUT,
+                status_code=504,
+                retryable=True,
+                safe_message="Ollama upstream stream request timed out.",
+            ) from exc
+        except httpx.RequestError as exc:
+            logger.error("Ollama upstream stream network error: %s", exc)
+            raise ProviderError(
+                provider="ollama",
+                kind=ProviderErrorKind.NETWORK_ERROR,
+                status_code=502,
+                retryable=True,
+                safe_message=f"Network error communicating with Ollama: {type(exc).__name__}",
+            ) from exc
 
         yield format_sse_done()
 

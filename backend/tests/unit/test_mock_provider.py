@@ -1,5 +1,6 @@
 import pytest
 from backend.normalization.models import NormalizedInferenceRequest, NormalizedMessage
+from backend.providers.base import ProviderError, ProviderErrorKind
 from backend.providers.mock_provider import MockProvider
 
 
@@ -32,5 +33,9 @@ async def test_mock_provider_error_modes():
         messages=[NormalizedMessage(role="user", content="Hi")],
     )
 
-    with pytest.raises(RuntimeError, match="429"):
+    with pytest.raises(ProviderError) as exc_info:
         await provider_429.chat_completion(req)
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.kind == ProviderErrorKind.RATE_LIMIT_EXCEEDED
+    assert exc_info.value.retryable is True
+

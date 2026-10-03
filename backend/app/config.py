@@ -85,8 +85,10 @@ class Settings(BaseSettings):
     # Upstream Provider Configuration
     OPENAI_API_KEY: str | None = None
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+    OPENAI_FALLBACK_MODEL: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     ANTHROPIC_BASE_URL: str = "https://api.anthropic.com/v1"
+    ANTHROPIC_FALLBACK_MODEL: str | None = None
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     UPSTREAM_TIMEOUT_SECONDS: float = 30.0
     UPSTREAM_MAX_CONNECTIONS: int = 100
