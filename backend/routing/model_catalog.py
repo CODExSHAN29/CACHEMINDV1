@@ -51,7 +51,7 @@ _MODEL_CATALOG: Dict[str, ResolvedModelTarget] = {
     # Ollama / Local Open-Source Models
     "llama3": ResolvedModelTarget("ollama", "llama3", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
     "llama3.1": ResolvedModelTarget("ollama", "llama3.1", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
-    "llama3.2": ResolvedModelTarget("ollama", "llama3.2", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
+    "llama3.2": ResolvedModelTarget("ollama", "llama3.2", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
     "mistral": ResolvedModelTarget("ollama", "mistral", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
     "mixtral": ResolvedModelTarget("ollama", "mixtral", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
     "qwen2.5": ResolvedModelTarget("ollama", "qwen2.5", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),

@@ -187,8 +187,9 @@ def test_build_routing_plan_rejects_wrong_provider_fallback_model(monkeypatch):
     assert "resolved to provider 'openai', expected 'anthropic'" in str(exc_info.value)
 
 
-def test_build_routing_plan_rejects_empty_fallback_model(monkeypatch):
-    monkeypatch.setattr(settings, "ANTHROPIC_FALLBACK_MODEL", "")
+def test_build_routing_plan_unconfigured_fallback_model(monkeypatch):
+    # Unconfigured fallback model results in primary-only plan with zero fallbacks (no error)
+    monkeypatch.setattr(settings, "ANTHROPIC_FALLBACK_MODEL", None)
     engine = RoutingEngine()
 
     req = NormalizedInferenceRequest(
@@ -196,9 +197,16 @@ def test_build_routing_plan_rejects_empty_fallback_model(monkeypatch):
         model="gpt-4o",
         allow_provider_fallback=True,
     )
-    with pytest.raises(InvalidFallbackConfigurationError) as exc_info:
-        engine.build_routing_plan(req)
-    assert "No fallback model configured for 'openai' primary provider" in str(exc_info.value)
+    plan = engine.build_routing_plan(req)
+    assert plan.primary.provider == "openai"
+    assert plan.primary.model == "gpt-4o"
+    assert len(plan.fallbacks) == 0
+
+    # Empty string fallback model also results in primary-only plan
+    monkeypatch.setattr(settings, "ANTHROPIC_FALLBACK_MODEL", "")
+    plan_empty = engine.build_routing_plan(req)
+    assert plan_empty.primary.provider == "openai"
+    assert len(plan_empty.fallbacks) == 0
 
 
 def test_build_routing_plan_capability_gating_system_instructions(monkeypatch):

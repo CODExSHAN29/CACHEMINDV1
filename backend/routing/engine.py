@@ -106,12 +106,7 @@ class RoutingEngine:
                 target_fallback_model = settings.OPENAI_FALLBACK_MODEL
                 expected_provider = "openai"
 
-            if primary_provider in ("openai", "anthropic"):
-                if not target_fallback_model:
-                    raise InvalidFallbackConfigurationError(
-                        f"No fallback model configured for '{primary_provider}' primary provider"
-                    )
-
+            if primary_provider in ("openai", "anthropic") and target_fallback_model:
                 try:
                     resolved_fallback = resolve_model(target_fallback_model)
                 except UnknownModelError as exc:

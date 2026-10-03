@@ -68,6 +68,11 @@ def test_resolve_known_ollama_models():
     assert target_llama.provider == "ollama"
     assert target_llama.canonical_model == "llama3"
 
+    target_llama32 = resolve_model("llama3.2")
+    assert target_llama32.provider == "ollama"
+    assert target_llama32.canonical_model == "llama3.2"
+    assert target_llama32.capabilities.multimodal is False
+
     target_deepseek = resolve_model("deepseek-r1")
     assert target_deepseek.provider == "ollama"
     assert target_deepseek.canonical_model == "deepseek-r1"

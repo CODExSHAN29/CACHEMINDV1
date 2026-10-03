@@ -17,6 +17,57 @@ from backend.providers.base import (
 logger = logging.getLogger(__name__)
 
 
+def _build_openai_chat_payload(
+    request: NormalizedInferenceRequest,
+    stream: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """
+    Serializes NormalizedInferenceRequest into a clean OpenAI Chat Completions wire payload.
+    Strictly excludes CacheMind-internal metadata (provider, namespace, tags,
+    attachment_hashes, provider_options, timeout, client_request_id, allow_provider_fallback).
+    """
+    payload: Dict[str, Any] = {
+        "model": request.model,
+        "messages": [msg.model_dump(exclude_none=True) for msg in request.messages],
+    }
+
+    if request.tools is not None:
+        payload["tools"] = request.tools
+    if request.tool_choice is not None:
+        payload["tool_choice"] = request.tool_choice
+    if request.temperature is not None:
+        payload["temperature"] = request.temperature
+    if request.top_p is not None:
+        payload["top_p"] = request.top_p
+    if request.n is not None and request.n != 1:
+        payload["n"] = request.n
+    if request.seed is not None:
+        payload["seed"] = request.seed
+    if request.stop is not None:
+        payload["stop"] = request.stop
+    if request.max_tokens is not None:
+        payload["max_tokens"] = request.max_tokens
+    if request.max_completion_tokens is not None:
+        payload["max_completion_tokens"] = request.max_completion_tokens
+    if request.presence_penalty is not None:
+        payload["presence_penalty"] = request.presence_penalty
+    if request.frequency_penalty is not None:
+        payload["frequency_penalty"] = request.frequency_penalty
+    if request.logit_bias is not None:
+        payload["logit_bias"] = request.logit_bias
+    if request.response_format is not None:
+        payload["response_format"] = request.response_format
+
+    is_stream = request.stream if stream is None else stream
+    if is_stream:
+        payload["stream"] = True
+
+    if request.user is not None:
+        payload["user"] = request.user
+
+    return payload
+
+
 def _normalize_openai_error(status_code: int, headers: httpx.Headers, body_text: str) -> ProviderError:
     provider_code: Optional[str] = None
     raw_error_message: str = ""
@@ -121,11 +172,7 @@ class OpenAIProvider(BaseProvider):
             "Content-Type": "application/json",
         }
 
-        payload = request.to_inference_identity_dict()
-        if request.stream:
-            payload["stream"] = True
-        if request.user:
-            payload["user"] = request.user
+        payload = _build_openai_chat_payload(request, stream=request.stream)
 
         start_time = time.perf_counter_ns()
         try:
@@ -192,10 +239,7 @@ class OpenAIProvider(BaseProvider):
             "Content-Type": "application/json",
         }
 
-        payload = request.to_inference_identity_dict()
-        payload["stream"] = True
-        if request.user:
-            payload["user"] = request.user
+        payload = _build_openai_chat_payload(request, stream=True)
 
         try:
             req = self._client.build_request(
