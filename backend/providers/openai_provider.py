@@ -6,22 +6,26 @@ import httpx
 
 from backend.app.config import settings
 from backend.normalization.models import NormalizedInferenceRequest
-from backend.providers.base import BaseProvider, ProviderError, ProviderErrorKind, ProviderResponse
+from backend.providers.base import (
+    BaseProvider,
+    ProviderError,
+    ProviderErrorKind,
+    ProviderResponse,
+    make_safe_provider_message,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def _normalize_openai_error(status_code: int, headers: httpx.Headers, body_text: str) -> ProviderError:
     provider_code: Optional[str] = None
-    safe_msg = f"OpenAI upstream returned HTTP {status_code}."
+    raw_error_message: str = ""
     try:
         data = json.loads(body_text)
         err = data.get("error", {})
         if isinstance(err, dict):
             provider_code = str(err.get("code") or err.get("type") or "") or None
-            msg = err.get("message")
-            if msg:
-                safe_msg = f"OpenAI error: {msg}"
+            raw_error_message = str(err.get("message") or "")
     except Exception:
         pass
 
@@ -46,10 +50,10 @@ def _normalize_openai_error(status_code: int, headers: httpx.Headers, body_text:
         kind = ProviderErrorKind.RATE_LIMIT_EXCEEDED
         retryable = True
     elif status_code in (400, 422):
-        lower_msg = safe_msg.lower()
-        if "context_length" in lower_msg or "maximum context length" in lower_msg:
+        lower_check = (raw_error_message + " " + (provider_code or "")).lower()
+        if "context_length" in lower_check or "maximum context length" in lower_check:
             kind = ProviderErrorKind.CONTEXT_LENGTH_EXCEEDED
-        elif "content_filter" in lower_msg or "safety" in lower_msg:
+        elif "content_filter" in lower_check or "safety" in lower_check:
             kind = ProviderErrorKind.CONTENT_FILTER
         else:
             kind = ProviderErrorKind.INVALID_REQUEST
@@ -60,6 +64,8 @@ def _normalize_openai_error(status_code: int, headers: httpx.Headers, body_text:
     else:
         kind = ProviderErrorKind.UNKNOWN
         retryable = (status_code >= 500)
+
+    safe_msg = make_safe_provider_message("openai", kind, status_code)
 
     return ProviderError(
         provider="openai",

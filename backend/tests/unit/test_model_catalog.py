@@ -26,16 +26,35 @@ def test_resolve_known_openai_models():
     assert target_o1.capabilities.tools is False
     assert target_o1.capabilities.system_instructions is False
 
+    target_o3 = resolve_model("o3-mini")
+    assert target_o3.provider == "openai"
+    assert target_o3.canonical_model == "o3-mini"
+    assert target_o3.capabilities.tools is True
+    assert target_o3.capabilities.system_instructions is True
+
+    target_o4 = resolve_model("o4-mini")
+    assert target_o4.provider == "openai"
+    assert target_o4.canonical_model == "o4-mini"
+    assert target_o4.capabilities.tools is True
+    assert target_o4.capabilities.multimodal is True
+    assert target_o4.capabilities.system_instructions is True
+
 
 def test_resolve_known_anthropic_models():
     target = resolve_model("claude-3-5-sonnet-20241022")
     assert target.provider == "anthropic"
     assert target.canonical_model == "claude-3-5-sonnet-20241022"
     assert target.capabilities.multimodal is True
+    # Anthropic adapter does not yet translate tools or structured_output
+    assert target.capabilities.tools is False
+    assert target.capabilities.structured_output is False
+    assert target.capabilities.system_instructions is True
 
     target_alias = resolve_model("claude-3-5-sonnet-latest")
     assert target_alias.provider == "anthropic"
     assert target_alias.canonical_model == "claude-3-5-sonnet-20241022"
+    assert target.capabilities.tools is False
+    assert target.capabilities.structured_output is False
 
     target_haiku = resolve_model("claude-3-5-haiku-20241022")
     assert target_haiku.provider == "anthropic"
@@ -63,6 +82,17 @@ def test_resolve_prefix_fallbacks():
 
     target_custom_ollama = resolve_model("mistral-small-24b")
     assert target_custom_ollama.provider == "ollama"
+
+
+def test_embedding_models_excluded_from_catalog():
+    with pytest.raises(UnknownModelError):
+        resolve_model("text-embedding-3-small")
+
+    with pytest.raises(UnknownModelError):
+        resolve_model("text-embedding-3-large")
+
+    with pytest.raises(UnknownModelError):
+        resolve_model("text-embedding-ada-002")
 
 
 def test_resolve_unknown_models_fail_deterministically():

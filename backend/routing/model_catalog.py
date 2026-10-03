@@ -26,40 +26,39 @@ class UnknownModelError(Exception):
 
 _MODEL_CATALOG: Dict[str, ResolvedModelTarget] = {
     # OpenAI Models
-    "gpt-4o": ResolvedModelTarget("openai", "gpt-4o", ModelCapabilities(multimodal=True)),
-    "gpt-4o-mini": ResolvedModelTarget("openai", "gpt-4o-mini", ModelCapabilities(multimodal=True)),
-    "gpt-4-turbo": ResolvedModelTarget("openai", "gpt-4-turbo", ModelCapabilities(multimodal=True)),
-    "gpt-4": ResolvedModelTarget("openai", "gpt-4", ModelCapabilities(multimodal=False)),
-    "gpt-3.5-turbo": ResolvedModelTarget("openai", "gpt-3.5-turbo", ModelCapabilities(multimodal=False)),
-    "o1": ResolvedModelTarget("openai", "o1", ModelCapabilities(tools=False, system_instructions=False)),
-    "o1-mini": ResolvedModelTarget("openai", "o1-mini", ModelCapabilities(tools=False, system_instructions=False)),
-    "o1-preview": ResolvedModelTarget("openai", "o1-preview", ModelCapabilities(tools=False, system_instructions=False)),
-    "o3-mini": ResolvedModelTarget("openai", "o3-mini", ModelCapabilities(tools=True)),
-    "text-embedding-3-small": ResolvedModelTarget("openai", "text-embedding-3-small", ModelCapabilities(tools=False)),
-    "text-embedding-3-large": ResolvedModelTarget("openai", "text-embedding-3-large", ModelCapabilities(tools=False)),
-    "text-embedding-ada-002": ResolvedModelTarget("openai", "text-embedding-ada-002", ModelCapabilities(tools=False)),
+    "gpt-4o": ResolvedModelTarget("openai", "gpt-4o", ModelCapabilities(tools=True, structured_output=True, multimodal=True, system_instructions=True)),
+    "gpt-4o-mini": ResolvedModelTarget("openai", "gpt-4o-mini", ModelCapabilities(tools=True, structured_output=True, multimodal=True, system_instructions=True)),
+    "gpt-4-turbo": ResolvedModelTarget("openai", "gpt-4-turbo", ModelCapabilities(tools=True, structured_output=True, multimodal=True, system_instructions=True)),
+    "gpt-4": ResolvedModelTarget("openai", "gpt-4", ModelCapabilities(tools=True, structured_output=True, multimodal=False, system_instructions=True)),
+    "gpt-3.5-turbo": ResolvedModelTarget("openai", "gpt-3.5-turbo", ModelCapabilities(tools=True, structured_output=True, multimodal=False, system_instructions=True)),
+    "o1": ResolvedModelTarget("openai", "o1", ModelCapabilities(tools=False, structured_output=True, multimodal=False, system_instructions=False)),
+    "o1-mini": ResolvedModelTarget("openai", "o1-mini", ModelCapabilities(tools=False, structured_output=True, multimodal=False, system_instructions=False)),
+    "o1-preview": ResolvedModelTarget("openai", "o1-preview", ModelCapabilities(tools=False, structured_output=True, multimodal=False, system_instructions=False)),
+    "o3": ResolvedModelTarget("openai", "o3", ModelCapabilities(tools=True, structured_output=True, multimodal=False, system_instructions=True)),
+    "o3-mini": ResolvedModelTarget("openai", "o3-mini", ModelCapabilities(tools=True, structured_output=True, multimodal=False, system_instructions=True)),
+    "o4-mini": ResolvedModelTarget("openai", "o4-mini", ModelCapabilities(tools=True, structured_output=True, multimodal=True, system_instructions=True)),
 
-    # Anthropic Models
-    "claude-3-5-sonnet-20241022": ResolvedModelTarget("anthropic", "claude-3-5-sonnet-20241022", ModelCapabilities(multimodal=True)),
-    "claude-3-5-sonnet-latest": ResolvedModelTarget("anthropic", "claude-3-5-sonnet-20241022", ModelCapabilities(multimodal=True)),
-    "claude-3-5-haiku-20241022": ResolvedModelTarget("anthropic", "claude-3-5-haiku-20241022", ModelCapabilities(multimodal=True)),
-    "claude-3-5-haiku-latest": ResolvedModelTarget("anthropic", "claude-3-5-haiku-20241022", ModelCapabilities(multimodal=True)),
-    "claude-3-opus-20240229": ResolvedModelTarget("anthropic", "claude-3-opus-20240229", ModelCapabilities(multimodal=True)),
-    "claude-3-opus-latest": ResolvedModelTarget("anthropic", "claude-3-opus-20240229", ModelCapabilities(multimodal=True)),
-    "claude-3-sonnet-20240229": ResolvedModelTarget("anthropic", "claude-3-sonnet-20240229", ModelCapabilities(multimodal=True)),
-    "claude-3-haiku-20240307": ResolvedModelTarget("anthropic", "claude-3-haiku-20240307", ModelCapabilities(multimodal=True)),
+    # Anthropic Models (Adapter currently preserves text & system instructions, no tools or structured_output translation)
+    "claude-3-5-sonnet-20241022": ResolvedModelTarget("anthropic", "claude-3-5-sonnet-20241022", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
+    "claude-3-5-sonnet-latest": ResolvedModelTarget("anthropic", "claude-3-5-sonnet-20241022", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
+    "claude-3-5-haiku-20241022": ResolvedModelTarget("anthropic", "claude-3-5-haiku-20241022", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
+    "claude-3-5-haiku-latest": ResolvedModelTarget("anthropic", "claude-3-5-haiku-20241022", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
+    "claude-3-opus-20240229": ResolvedModelTarget("anthropic", "claude-3-opus-20240229", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
+    "claude-3-opus-latest": ResolvedModelTarget("anthropic", "claude-3-opus-20240229", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
+    "claude-3-sonnet-20240229": ResolvedModelTarget("anthropic", "claude-3-sonnet-20240229", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
+    "claude-3-haiku-20240307": ResolvedModelTarget("anthropic", "claude-3-haiku-20240307", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
 
     # Ollama / Local Open-Source Models
-    "llama3": ResolvedModelTarget("ollama", "llama3", ModelCapabilities()),
-    "llama3.1": ResolvedModelTarget("ollama", "llama3.1", ModelCapabilities()),
-    "llama3.2": ResolvedModelTarget("ollama", "llama3.2", ModelCapabilities(multimodal=True)),
-    "mistral": ResolvedModelTarget("ollama", "mistral", ModelCapabilities()),
-    "mixtral": ResolvedModelTarget("ollama", "mixtral", ModelCapabilities()),
-    "qwen2.5": ResolvedModelTarget("ollama", "qwen2.5", ModelCapabilities()),
-    "deepseek-r1": ResolvedModelTarget("ollama", "deepseek-r1", ModelCapabilities()),
-    "deepseek-v3": ResolvedModelTarget("ollama", "deepseek-v3", ModelCapabilities()),
-    "phi4": ResolvedModelTarget("ollama", "phi4", ModelCapabilities()),
-    "gemma2": ResolvedModelTarget("ollama", "gemma2", ModelCapabilities()),
+    "llama3": ResolvedModelTarget("ollama", "llama3", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "llama3.1": ResolvedModelTarget("ollama", "llama3.1", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "llama3.2": ResolvedModelTarget("ollama", "llama3.2", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
+    "mistral": ResolvedModelTarget("ollama", "mistral", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "mixtral": ResolvedModelTarget("ollama", "mixtral", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "qwen2.5": ResolvedModelTarget("ollama", "qwen2.5", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "deepseek-r1": ResolvedModelTarget("ollama", "deepseek-r1", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "deepseek-v3": ResolvedModelTarget("ollama", "deepseek-v3", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "phi4": ResolvedModelTarget("ollama", "phi4", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "gemma2": ResolvedModelTarget("ollama", "gemma2", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
 
     # Mock Test Models
     "mock": ResolvedModelTarget("mock", "mock-model", ModelCapabilities()),
@@ -82,14 +81,40 @@ def resolve_model(model_name: str) -> ResolvedModelTarget:
     if m_lower in _MODEL_CATALOG:
         return _MODEL_CATALOG[m_lower]
 
-    if m_lower.startswith("gpt-") or m_lower.startswith("o1") or m_lower.startswith("o3") or m_lower.startswith("text-embedding-"):
-        return ResolvedModelTarget(provider="openai", canonical_model=m, capabilities=ModelCapabilities())
+    if m_lower.startswith("o1"):
+        return ResolvedModelTarget(
+            provider="openai",
+            canonical_model=m,
+            capabilities=ModelCapabilities(tools=False, structured_output=True, multimodal=False, system_instructions=False),
+        )
+
+    if m_lower.startswith("o3") or m_lower.startswith("o4"):
+        return ResolvedModelTarget(
+            provider="openai",
+            canonical_model=m,
+            capabilities=ModelCapabilities(tools=True, structured_output=True, multimodal=False, system_instructions=True),
+        )
+
+    if m_lower.startswith("gpt-"):
+        return ResolvedModelTarget(
+            provider="openai",
+            canonical_model=m,
+            capabilities=ModelCapabilities(tools=True, structured_output=True, multimodal=False, system_instructions=True),
+        )
 
     if m_lower.startswith("claude-"):
-        return ResolvedModelTarget(provider="anthropic", canonical_model=m, capabilities=ModelCapabilities(multimodal=True))
+        return ResolvedModelTarget(
+            provider="anthropic",
+            canonical_model=m,
+            capabilities=ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True),
+        )
 
     if any(m_lower.startswith(prefix) for prefix in ("llama", "mistral", "mixtral", "deepseek", "phi", "qwen", "gemma")):
-        return ResolvedModelTarget(provider="ollama", canonical_model=m, capabilities=ModelCapabilities())
+        return ResolvedModelTarget(
+            provider="ollama",
+            canonical_model=m,
+            capabilities=ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True),
+        )
 
     if m_lower.startswith("mock"):
         return ResolvedModelTarget(provider="mock", canonical_model=m, capabilities=ModelCapabilities())

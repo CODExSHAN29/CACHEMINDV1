@@ -6,21 +6,19 @@ import httpx
 
 from backend.app.config import settings
 from backend.normalization.models import NormalizedInferenceRequest
-from backend.providers.base import BaseProvider, ProviderError, ProviderErrorKind, ProviderResponse
+from backend.providers.base import (
+    BaseProvider,
+    ProviderError,
+    ProviderErrorKind,
+    ProviderResponse,
+    make_safe_provider_message,
+)
 from backend.streaming.sse import format_sse_chunk, format_sse_done
 
 logger = logging.getLogger(__name__)
 
 
 def _normalize_ollama_error(status_code: int, body_text: str) -> ProviderError:
-    safe_msg = f"Ollama upstream returned HTTP {status_code}."
-    try:
-        data = json.loads(body_text)
-        if isinstance(data, dict) and "error" in data:
-            safe_msg = f"Ollama error: {data['error']}"
-    except Exception:
-        pass
-
     if status_code == 404:
         kind = ProviderErrorKind.NOT_FOUND
         retryable = False
@@ -30,6 +28,8 @@ def _normalize_ollama_error(status_code: int, body_text: str) -> ProviderError:
     else:
         kind = ProviderErrorKind.UNKNOWN
         retryable = (status_code >= 500)
+
+    safe_msg = make_safe_provider_message("ollama", kind, status_code)
 
     return ProviderError(
         provider="ollama",

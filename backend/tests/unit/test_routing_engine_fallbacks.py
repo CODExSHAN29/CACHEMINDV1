@@ -150,3 +150,99 @@ async def test_provider_registry_close_all():
     await registry.close_all()
     assert registry.get("p1") is None
     assert registry.get("p2") is None
+
+
+def test_build_routing_plan_rejects_unknown_fallback_model(monkeypatch):
+    monkeypatch.setattr(settings, "ANTHROPIC_FALLBACK_MODEL", "nonexistent-model-xyz")
+    engine = RoutingEngine()
+
+    req = NormalizedInferenceRequest(
+        messages=[ChatMessage(role="user", content="Hello")],
+        model="gpt-4o",
+        allow_provider_fallback=True,
+    )
+    plan = engine.build_routing_plan(req)
+    assert plan.primary.provider == "openai"
+    assert len(plan.fallbacks) == 0
+
+
+def test_build_routing_plan_capability_gating_system_instructions(monkeypatch):
+    # o1 does not support system instructions
+    monkeypatch.setattr(settings, "OPENAI_FALLBACK_MODEL", "o1")
+    engine = RoutingEngine()
+
+    # Case 1: Request with system prompt targeting Anthropic primary -> o1 fallback should be rejected
+    req_with_system = NormalizedInferenceRequest(
+        messages=[
+            ChatMessage(role="system", content="Act as helper"),
+            ChatMessage(role="user", content="Hello"),
+        ],
+        model="claude-3-5-sonnet-20241022",
+        allow_provider_fallback=True,
+    )
+    plan = engine.build_routing_plan(req_with_system)
+    assert len(plan.fallbacks) == 0
+
+    # Case 2: Request without system prompt -> o1 fallback allowed
+    req_without_system = NormalizedInferenceRequest(
+        messages=[ChatMessage(role="user", content="Hello")],
+        model="claude-3-5-sonnet-20241022",
+        allow_provider_fallback=True,
+    )
+    plan_ok = engine.build_routing_plan(req_without_system)
+    assert len(plan_ok.fallbacks) == 1
+    assert plan_ok.fallbacks[0].model == "o1"
+
+
+@pytest.mark.asyncio
+async def test_circuit_breaker_failure_accounting():
+    registry = ProviderRegistry()
+    cb_registry = CircuitBreakerRegistry()
+    engine = RoutingEngine(provider_registry=registry, circuit_registry=cb_registry)
+
+    # 1. Client error (401 Auth) -> Should NOT record failure
+    class AuthErrorProvider(MockProvider):
+        async def chat_completion(self, request):
+            raise ProviderError(
+                provider="openai",
+                kind=ProviderErrorKind.AUTHENTICATION_ERROR,
+                status_code=401,
+                retryable=False,
+                safe_message="Authentication failed with openai upstream.",
+            )
+
+    registry.register("openai", AuthErrorProvider(provider_name="openai"))
+    breaker = cb_registry.get_breaker("openai:gpt-4o")
+    req = NormalizedInferenceRequest(
+        messages=[ChatMessage(role="user", content="Test")],
+        model="gpt-4o",
+    )
+
+    with pytest.raises(ProviderError):
+        await engine.execute(req)
+    assert breaker.failure_count == 0
+
+    # 2. Server error (500 Internal / 503 Unavailable) -> SHOULD record failure
+    class UnavailableProvider(MockProvider):
+        async def chat_completion(self, request):
+            raise ProviderError(
+                provider="openai",
+                kind=ProviderErrorKind.UPSTREAM_UNAVAILABLE,
+                status_code=503,
+                retryable=True,
+                safe_message="Openai upstream service is temporarily unavailable.",
+            )
+
+    registry.register("openai", UnavailableProvider(provider_name="openai"))
+    registry.register("anthropic", MockProvider(provider_name="anthropic"))
+    plan = RoutingPlan(
+        primary=ProviderTarget(provider="openai", model="gpt-4o"),
+        fallbacks=[ProviderTarget(provider="anthropic", model="claude-3-5-sonnet-20241022")],
+    )
+
+    result = await engine.execute(req, plan=plan)
+    assert result.provider_used == "anthropic"
+    assert breaker.failure_count == 1
+    assert len(result.errors_encountered) == 1
+    assert result.errors_encountered[0] == "openai:gpt-4o - Openai upstream service is temporarily unavailable."
+

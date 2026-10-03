@@ -7,7 +7,13 @@ import httpx
 from backend.app.config import settings
 from backend.caching.fingerprint import extract_system_prompt
 from backend.normalization.models import NormalizedInferenceRequest
-from backend.providers.base import BaseProvider, ProviderError, ProviderErrorKind, ProviderResponse
+from backend.providers.base import (
+    BaseProvider,
+    ProviderError,
+    ProviderErrorKind,
+    ProviderResponse,
+    make_safe_provider_message,
+)
 from backend.routing.model_catalog import resolve_model
 from backend.streaming.sse import format_sse_chunk, format_sse_done
 
@@ -16,15 +22,13 @@ logger = logging.getLogger(__name__)
 
 def _normalize_anthropic_error(status_code: int, headers: httpx.Headers, body_text: str) -> ProviderError:
     provider_code: Optional[str] = None
-    safe_msg = f"Anthropic upstream returned HTTP {status_code}."
+    raw_error_message: str = ""
     try:
         data = json.loads(body_text)
         err = data.get("error", {})
         if isinstance(err, dict):
             provider_code = str(err.get("type") or "") or None
-            msg = err.get("message")
-            if msg:
-                safe_msg = f"Anthropic error: {msg}"
+            raw_error_message = str(err.get("message") or "")
     except Exception:
         pass
 
@@ -36,33 +40,35 @@ def _normalize_anthropic_error(status_code: int, headers: httpx.Headers, body_te
         except ValueError:
             pass
 
-    if status_code == 401:
+    if status_code == 401 or provider_code == "authentication_error":
         kind = ProviderErrorKind.AUTHENTICATION_ERROR
         retryable = False
-    elif status_code == 403:
+    elif status_code == 403 or provider_code == "permission_error":
         kind = ProviderErrorKind.PERMISSION_DENIED
         retryable = False
-    elif status_code == 404:
+    elif status_code == 404 or provider_code == "not_found_error":
         kind = ProviderErrorKind.NOT_FOUND
         retryable = False
-    elif status_code == 429:
+    elif status_code == 429 or provider_code == "rate_limit_error":
         kind = ProviderErrorKind.RATE_LIMIT_EXCEEDED
         retryable = True
-    elif status_code in (400, 422):
-        lower_msg = safe_msg.lower()
-        if "prompt is too long" in lower_msg or "context_length" in lower_msg or "max_tokens" in lower_msg:
+    elif status_code in (400, 422) or provider_code == "invalid_request_error":
+        lower_check = (raw_error_message + " " + (provider_code or "")).lower()
+        if "prompt is too long" in lower_check or "context_length" in lower_check or "max_tokens" in lower_check:
             kind = ProviderErrorKind.CONTEXT_LENGTH_EXCEEDED
-        elif "content_filter" in lower_msg or "safety" in lower_msg:
+        elif "content_filter" in lower_check or "safety" in lower_check:
             kind = ProviderErrorKind.CONTENT_FILTER
         else:
             kind = ProviderErrorKind.INVALID_REQUEST
         retryable = False
-    elif status_code in (500, 502, 503, 504, 529):
-        kind = ProviderErrorKind.UPSTREAM_UNAVAILABLE if status_code in (502, 503, 504, 529) else ProviderErrorKind.INTERNAL_SERVER_ERROR
+    elif status_code in (500, 502, 503, 504, 529) or provider_code == "overloaded_error":
+        kind = ProviderErrorKind.UPSTREAM_UNAVAILABLE if status_code in (502, 503, 504, 529) or provider_code == "overloaded_error" else ProviderErrorKind.INTERNAL_SERVER_ERROR
         retryable = True
     else:
         kind = ProviderErrorKind.UNKNOWN
         retryable = (status_code >= 500)
+
+    safe_msg = make_safe_provider_message("anthropic", kind, status_code)
 
     return ProviderError(
         provider="anthropic",
