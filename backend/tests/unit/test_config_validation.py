@@ -72,3 +72,64 @@ def test_production_mode_passes_with_valid_config():
     )
     # Should not raise
     cfg.validate_production_configuration()
+
+
+def test_verification_mode_allows_mock_flags():
+    """Verification mode should pass validation while allowing mock provider flags for staging verification."""
+    cfg = Settings(
+        ENVIRONMENT="verification",
+        ADMIN_MASTER_KEY="cm_verify_master_sec_09a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4",
+        DATABASE_URL="postgresql+asyncpg://user:pass@localhost:5432/cachemind_verify",
+        CACHE_BACKEND="redis",
+        REDIS_URL="redis://localhost:6379/0",
+        VECTOR_BACKEND="pgvector",
+        ALLOW_MOCK_PROVIDERS=True,
+        ALLOW_MOCK_EMBEDDINGS=True,
+    )
+    cfg.validate_production_configuration()
+
+
+def test_init_db_does_not_create_all_in_production_or_verification(monkeypatch):
+    """Production and verification gateway workers must NEVER call create_all."""
+    import backend.db.session as db_session_mod
+    from backend.db.models import Base
+
+    for env in ("production", "verification"):
+        monkeypatch.setattr(db_session_mod.settings, "ENVIRONMENT", env)
+        monkeypatch.setattr(db_session_mod.settings, "AUTO_RUN_MIGRATIONS", False)
+
+        called = False
+
+        def fake_create_all(conn):
+            nonlocal called
+            called = True
+
+        monkeypatch.setattr(Base.metadata, "create_all", fake_create_all)
+
+        import asyncio
+        asyncio.run(db_session_mod.init_db())
+
+        assert called is False, f"create_all must not be called in {env}"
+
+
+def test_init_db_calls_create_all_in_development(monkeypatch):
+    """Development environment preserves explicit create_all behaviour."""
+    import backend.db.session as db_session_mod
+    from backend.db.models import Base
+
+    monkeypatch.setattr(db_session_mod.settings, "ENVIRONMENT", "development")
+    monkeypatch.setattr(db_session_mod.settings, "AUTO_RUN_MIGRATIONS", False)
+
+    called = False
+
+    def fake_create_all(conn):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(Base.metadata, "create_all", fake_create_all)
+
+    import asyncio
+    asyncio.run(db_session_mod.init_db())
+
+    assert called is True, "create_all should be called in development"
+
