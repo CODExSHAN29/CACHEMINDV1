@@ -109,6 +109,54 @@ jobs:
         run: |
           docker build -t cachemind:latest .
 
+  compose-smoke:
+    name: Compose Runtime Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Start verification stack
+        run: |
+          docker compose -f docker-compose.verify.yml up -d --build
+
+      - name: Wait for gateway readiness
+        run: |
+          echo "Waiting for CacheMind Gateway /health/ready probe..."
+          READY=0
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8000/health/ready > /dev/null 2>&1; then
+              echo "Gateway is ready (attempt $i)"
+              READY=1
+              break
+            fi
+            sleep 2
+          done
+
+          if [ $READY -ne 1 ]; then
+            echo "ERROR: Gateway failed to become ready within 120s"
+            echo "--- Container Status ---"
+            docker compose -f docker-compose.verify.yml ps
+            echo "--- Migration Logs ---"
+            docker compose -f docker-compose.verify.yml logs migration
+            echo "--- Postgres Logs ---"
+            docker compose -f docker-compose.verify.yml logs postgres
+            echo "--- Redis Logs ---"
+            docker compose -f docker-compose.verify.yml logs redis
+            echo "--- Gateway Logs ---"
+            docker compose -f docker-compose.verify.yml logs cachemind-gateway
+            exit 1
+          fi
+
+      - name: Execute runtime smoke verification
+        run: |
+          docker compose -f docker-compose.verify.yml exec -T cachemind-gateway python scripts/verify_live.py
+
+      - name: Tear down verification stack
+        if: always()
+        run: |
+          docker compose -f docker-compose.verify.yml down -v --remove-orphans
+
   frontend:
     name: Dashboard Frontend Build
     runs-on: ubuntu-latest
