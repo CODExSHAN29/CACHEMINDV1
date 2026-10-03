@@ -9,6 +9,8 @@ on:
       - 'feat/*'
       - 'fix/**'
       - 'fix/*'
+      - 'refactor/**'
+      - 'refactor/*'
   pull_request:
     branches:
       - main
