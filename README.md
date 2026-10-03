@@ -76,42 +76,195 @@ Client App (OpenAI SDK / LangChain / LlamaIndex)
 
 ## 🏗️ Architecture & Request Flow
 
-```
-                                  [ Client Request ]
-                                          │
-                                          ▼
-                      [ FastAPI Gateway: /v1/chat/completions ]
-                                          │
-                         [ 1. Server-Side Authentication ]
-                  (SHA-256 API Key -> Tenant & Project Resolution)
-                                          │
-                         [ 2. Ingress PII Sanitization ]
-                 (Mask/Block Cards, SSNs, Emails, Phone, Tokens)
-                                          │
-                         [ 3. Deterministic Normalizer ]
-                 (Sort payload keys, preserve sequence, strip transport)
-                                          │
-                         [ 4. L1 Exact Fingerprint Lookup ]
-                                     /          \
-                       Exact Hit    /            \ Exact Miss
-                                   ▼              ▼
-                     [ Return L1 Response ]   [ 5. L2 Semantic Vector Search ]
-                     - Zero Upstream Calls    (Quantized ONNX Vector Index)
-                                                         /          \
-                                            Semantic Hit/            \ Miss
-                                                       ▼              ▼
-                                           [ 6. Guardrail Check ]  [ 7. Single-Flight Coalescer ]
-                                           - Numerical Check       - Prevent Thundering Herd
-                                           - Negation Parity       - 1 Leader Upstream Call
-                                           - Temporal Matching     - N-1 Await Leader Future
-                                                       │                      │
-                                                       └──────────┬───────────┘
-                                                                  │
-                                                                  ▼
-                                                   [ 8. Response Ingestion & Cache ]
-                                                   - Store to L1 & L2 Index
-                                                   - Persist Structured RequestLog
-                                                   - Stream or Return JSON
+```                                      CACHEMIND
+                         OpenAI + Anthropic Gateway Platform
+
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│                              CLIENTS                                       │
+│                                                                            │
+│   OpenAI SDK       Anthropic SDK*       cURL       Apps       Playground   │
+│                                                                            │
+└──────────────────────────────────┬─────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                          PUBLIC API / EDGE                                 │
+│                                                                            │
+│   HTTPS                                                                    │
+│   Request ID                                                               │
+│   Body-size limits                                                         │
+│   CORS                                                                     │
+│   Global abuse protection                                                  │
+│                                                                            │
+└──────────────────────────────────┬─────────────────────────────────────────┘
+                                   │
+                 ┌─────────────────┴──────────────────┐
+                 │                                    │
+                 ▼                                    ▼
+┌──────────────────────────────┐      ┌─────────────────────────────────────┐
+│        DATA PLANE            │      │          CONTROL PLANE              │
+│                              │      │                                     │
+│ /v1/chat/completions         │      │ Login / Signup                      │
+│ /v1/responses   [later]      │      │ Workspaces                          │
+│ /v1/messages    [later]      │      │ Projects                            │
+│                              │      │ API Keys                            │
+│ Project API keys ONLY        │      │ Provider Settings                   │
+│                              │      │ Usage / Analytics                   │
+└───────────────┬──────────────┘      │ Cache Management                    │
+                │                     │                                     │
+                │                     │ Browser Session ONLY                │
+                │                     └──────────────────┬──────────────────┘
+                │                                        │
+                ▼                                        ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                     REQUEST ADMISSION LAYER                                │
+│                                                                            │
+│   Project API Key Authentication                                           │
+│                │                                                           │
+│   Tenant / Project Resolution                                              │
+│                │                                                           │
+│   Gateway RPM / Request Quota                                              │
+│                │                                                           │
+│   PII Policy                                                               │
+│                │                                                           │
+│   Request Validation                                                       │
+│                                                                            │
+└──────────────────────────────────┬─────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                         PROTOCOL ADAPTER                                    │
+│                                                                            │
+│  OpenAI Chat API ────┐                                                     │
+│  OpenAI Responses ───┼──────► Canonical Gateway Request                   │
+│  Anthropic Messages ─┘              (internal IR)                         │
+│                                                                            │
+└──────────────────────────────────┬─────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                    MODEL + PROVIDER RESOLUTION                             │
+│                                                                            │
+│                     [ Model Catalog ]                                      │
+│                                                                            │
+│      model alias ─────────► provider ─────────► canonical model             │
+│                                                                            │
+│                OpenAI                       Anthropic                       │
+│                                                                            │
+│                 │                              │                            │
+│                 └────────── Route Policy ──────┘                            │
+│                                                                            │
+│    Primary provider                                                        │
+│    Optional fallback                                                       │
+│    Capability compatibility                                                │
+│    Route-policy version                                                    │
+│                                                                            │
+└──────────────────────────────────┬─────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                         CACHE POLICY                                       │
+│                                                                            │
+│     tenant                                                                 │
+│     project                                                                │
+│     provider                                                               │
+│     canonical model                                                        │
+│     system instructions                                                    │
+│     generation parameters                                                  │
+│     tools/output contract                                                  │
+│     namespace                                                              │
+│     cache-policy version                                                   │
+│                                                                            │
+│                     │                                                      │
+│                     ▼                                                      │
+│             Exact Request Identity                                         │
+│                                                                            │
+└──────────────────────────────────┬─────────────────────────────────────────┘
+                                   │
+                                   ▼
+                      ┌────────────────────────┐
+                      │      L1 EXACT CACHE    │
+                      │         Redis          │
+                      └─────────┬──────────────┘
+                                │
+                 ┌──────────────┴─────────────┐
+                 │                            │
+             EXACT HIT                     MISS
+                 │                            │
+                 ▼                            ▼
+        Return Cached Response       Semantic Eligibility
+                                             │
+                                  ┌──────────┴──────────┐
+                                  │                     │
+                              INELIGIBLE             ELIGIBLE
+                                  │                     │
+                                  │                     ▼
+                                  │           FastEmbed / embedding
+                                  │                     │
+                                  │                     ▼
+                                  │              pgvector search
+                                  │                     │
+                                  │                     ▼
+                                  │             Guardrail Arbiter
+                                  │                     │
+                                  │          ┌──────────┴──────────┐
+                                  │          │                     │
+                                  │       L2 HIT                  MISS
+                                  │          │                     │
+                                  │          ▼                     │
+                                  │   Return Cached Response       │
+                                  │                                │
+                                  └────────────────┬───────────────┘
+                                                   │
+                                                   ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                     UPSTREAM ADMISSION                                     │
+│                                                                            │
+│        Daily project budget                                                │
+│        Upstream-request quota                                              │
+│        Token budget                                                        │
+│        Distributed single-flight                                           │
+│                                                                            │
+└──────────────────────────────────┬─────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                        PROVIDER EXECUTOR                                   │
+│                                                                            │
+│                  Typed Provider Interface                                  │
+│                                                                            │
+│         ┌─────────────────────┐       ┌─────────────────────┐               │
+│         │   OpenAI Adapter    │       │ Anthropic Adapter   │               │
+│         │                     │       │                     │               │
+│         │ request mapper      │       │ request mapper      │               │
+│         │ stream mapper       │       │ stream mapper       │               │
+│         │ response mapper     │       │ response mapper     │               │
+│         │ error mapper        │       │ error mapper        │               │
+│         └──────────┬──────────┘       └──────────┬──────────┘               │
+│                    │                             │                          │
+│                    ▼                             ▼                          │
+│                OpenAI API                   Anthropic API                   │
+│                                                                            │
+└──────────────────────────────────┬─────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                        RESPONSE PIPELINE                                   │
+│                                                                            │
+│   Normalize Provider Response                                              │
+│              │                                                             │
+│   Usage Reconciliation                                                     │
+│              │                                                             │
+│   Exact Cache Backfill                                                     │
+│              │                                                             │
+│   Safe Semantic Cache Backfill                                             │
+│              │                                                             │
+│   Telemetry Event                                                          │
+│              │                                                             │
+│   Client Protocol Response                                                 │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
