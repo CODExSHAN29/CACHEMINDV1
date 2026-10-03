@@ -5,8 +5,6 @@ services:
     image: pgvector/pgvector:pg16
     container_name: cachemind-postgres-verify
     restart: unless-stopped
-    ports:
-      - "5432:5432"
     environment:
       - POSTGRES_USER=cachemind_user
       - POSTGRES_PASSWORD=cachemind_password
@@ -25,8 +23,6 @@ services:
     image: redis:7.2-alpine
     container_name: cachemind-redis-verify
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redis_verify_data:/data
@@ -59,7 +55,7 @@ services:
     container_name: cachemind-gateway-verify
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - ENVIRONMENT=verification
       - LOG_LEVEL=info
@@ -74,8 +70,6 @@ services:
       - ALLOW_MOCK_PROVIDERS=true
       - ALLOW_MOCK_EMBEDDINGS=true
       - ADMIN_MASTER_KEY=cm_verify_master_sec_09a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4
-      - OPENAI_API_KEY=mock-openai-key
-      - ANTHROPIC_API_KEY=mock-anthropic-key
       - DB_POOL_SIZE=20
       - DB_MAX_OVERFLOW=10
       - DB_POOL_TIMEOUT=30.0
@@ -98,7 +92,7 @@ services:
     container_name: cachemind-prometheus-verify
     restart: unless-stopped
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:

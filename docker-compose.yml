@@ -5,11 +5,9 @@ services:
     image: pgvector/pgvector:pg16
     container_name: cachemind-postgres
     restart: unless-stopped
-    ports:
-      - "5432:5432"
     environment:
       - POSTGRES_USER=cachemind_user
-      - POSTGRES_PASSWORD=cachemind_password
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       - POSTGRES_DB=cachemind_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -25,8 +23,6 @@ services:
     image: redis:7.2-alpine
     container_name: cachemind-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redis_data:/data
@@ -45,7 +41,7 @@ services:
     container_name: cachemind-migration
     command: ["alembic", "upgrade", "head"]
     environment:
-      - DATABASE_URL=postgresql+asyncpg://cachemind_user:cachemind_password@postgres:5432/cachemind_db
+      - DATABASE_URL=postgresql+asyncpg://cachemind_user:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/cachemind_db
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,7 +63,7 @@ services:
       - PORT=8000
       - CACHE_BACKEND=redis
       - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=postgresql+asyncpg://cachemind_user:cachemind_password@postgres:5432/cachemind_db
+      - DATABASE_URL=postgresql+asyncpg://cachemind_user:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/cachemind_db
       - AUTO_RUN_MIGRATIONS=false
       - VECTOR_BACKEND=pgvector
       - SEMANTIC_CACHE_MODE=safe
@@ -98,7 +94,7 @@ services:
     container_name: cachemind-prometheus
     restart: unless-stopped
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:

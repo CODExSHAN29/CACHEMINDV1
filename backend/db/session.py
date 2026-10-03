@@ -122,7 +122,14 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Initialize database tables for testing or development."""
+    """Initialize database tables for testing or development.
+
+    Production and verification deployments must never create schema at
+    worker startup. A dedicated one-shot migration container owns schema
+    evolution, so gateway workers run with AUTO_RUN_MIGRATIONS=false and
+    no fallback to Base.metadata.create_all(). Only development/test
+    environments preserve the explicit create_all() behaviour.
+    """
     if settings.AUTO_RUN_MIGRATIONS:
         logger.info("AUTO_RUN_MIGRATIONS is enabled. Running Alembic migrations...")
         from alembic import command
@@ -131,6 +138,13 @@ async def init_db() -> None:
         alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
         command.upgrade(alembic_cfg, "head")
         logger.info("Alembic migrations completed successfully.")
+        return
+
+    if settings.ENVIRONMENT in ("production", "verification"):
+        logger.info(
+            "Skipping schema initialization in %s: dedicated migration container owns schema",
+            settings.ENVIRONMENT,
+        )
         return
 
     async with engine.begin() as conn:
