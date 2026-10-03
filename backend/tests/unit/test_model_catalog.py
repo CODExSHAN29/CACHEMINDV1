@@ -44,7 +44,7 @@ def test_resolve_known_anthropic_models():
     target = resolve_model("claude-3-5-sonnet-20241022")
     assert target.provider == "anthropic"
     assert target.canonical_model == "claude-3-5-sonnet-20241022"
-    assert target.capabilities.multimodal is True
+    assert target.capabilities.multimodal is False
     # Anthropic adapter does not yet translate tools or structured_output
     assert target.capabilities.tools is False
     assert target.capabilities.structured_output is False
@@ -52,13 +52,15 @@ def test_resolve_known_anthropic_models():
 
     target_alias = resolve_model("claude-3-5-sonnet-latest")
     assert target_alias.provider == "anthropic"
-    assert target_alias.canonical_model == "claude-3-5-sonnet-20241022"
-    assert target.capabilities.tools is False
-    assert target.capabilities.structured_output is False
+    assert target_alias.canonical_model == "claude-3-5-sonnet-latest"
+    assert target_alias.capabilities.multimodal is False
+    assert target_alias.capabilities.tools is False
+    assert target_alias.capabilities.structured_output is False
 
     target_haiku = resolve_model("claude-3-5-haiku-20241022")
     assert target_haiku.provider == "anthropic"
     assert target_haiku.canonical_model == "claude-3-5-haiku-20241022"
+    assert target_haiku.capabilities.multimodal is False
 
 
 def test_resolve_known_ollama_models():

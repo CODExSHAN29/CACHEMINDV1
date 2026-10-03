@@ -1,3 +1,5 @@
+import asyncio
+import httpx
 import pytest
 
 from backend.app.config import settings
@@ -6,7 +8,11 @@ from backend.providers.base import ProviderError, ProviderErrorKind
 from backend.providers.mock_provider import MockProvider
 from backend.providers.registry import ProviderRegistry
 from backend.resilience.circuit_breaker import CircuitBreakerRegistry
-from backend.routing.engine import RoutingEngine, is_plain_text_compatible
+from backend.routing.engine import (
+    InvalidFallbackConfigurationError,
+    RoutingEngine,
+    is_plain_text_compatible,
+)
 from backend.routing.models import ProviderTarget, RoutingPlan
 
 
@@ -161,9 +167,38 @@ def test_build_routing_plan_rejects_unknown_fallback_model(monkeypatch):
         model="gpt-4o",
         allow_provider_fallback=True,
     )
-    plan = engine.build_routing_plan(req)
-    assert plan.primary.provider == "openai"
-    assert len(plan.fallbacks) == 0
+    with pytest.raises(InvalidFallbackConfigurationError) as exc_info:
+        engine.build_routing_plan(req)
+    assert "could not be resolved in catalog" in str(exc_info.value)
+
+
+def test_build_routing_plan_rejects_wrong_provider_fallback_model(monkeypatch):
+    # ANTHROPIC_FALLBACK_MODEL configured to an OpenAI model
+    monkeypatch.setattr(settings, "ANTHROPIC_FALLBACK_MODEL", "gpt-4o-mini")
+    engine = RoutingEngine()
+
+    req = NormalizedInferenceRequest(
+        messages=[ChatMessage(role="user", content="Hello")],
+        model="gpt-4o",
+        allow_provider_fallback=True,
+    )
+    with pytest.raises(InvalidFallbackConfigurationError) as exc_info:
+        engine.build_routing_plan(req)
+    assert "resolved to provider 'openai', expected 'anthropic'" in str(exc_info.value)
+
+
+def test_build_routing_plan_rejects_empty_fallback_model(monkeypatch):
+    monkeypatch.setattr(settings, "ANTHROPIC_FALLBACK_MODEL", "")
+    engine = RoutingEngine()
+
+    req = NormalizedInferenceRequest(
+        messages=[ChatMessage(role="user", content="Hello")],
+        model="gpt-4o",
+        allow_provider_fallback=True,
+    )
+    with pytest.raises(InvalidFallbackConfigurationError) as exc_info:
+        engine.build_routing_plan(req)
+    assert "No fallback model configured for 'openai' primary provider" in str(exc_info.value)
 
 
 def test_build_routing_plan_capability_gating_system_instructions(monkeypatch):
@@ -245,4 +280,35 @@ async def test_circuit_breaker_failure_accounting():
     assert breaker.failure_count == 1
     assert len(result.errors_encountered) == 1
     assert result.errors_encountered[0] == "openai:gpt-4o - Openai upstream service is temporarily unavailable."
+
+
+@pytest.mark.asyncio
+async def test_raw_transport_errors_do_not_trip_circuit_or_retry():
+    registry = ProviderRegistry()
+    cb_registry = CircuitBreakerRegistry()
+    engine = RoutingEngine(provider_registry=registry, circuit_registry=cb_registry)
+
+    class RawTransportErrorProvider(MockProvider):
+        async def chat_completion(self, request):
+            raise httpx.ConnectError("Connection refused")
+
+    registry.register("openai", RawTransportErrorProvider(provider_name="openai"))
+    registry.register("anthropic", MockProvider(provider_name="anthropic"))
+    breaker = cb_registry.get_breaker("openai:gpt-4o")
+
+    plan = RoutingPlan(
+        primary=ProviderTarget(provider="openai", model="gpt-4o"),
+        fallbacks=[ProviderTarget(provider="anthropic", model="claude-3-5-sonnet-20241022")],
+    )
+    req = NormalizedInferenceRequest(
+        messages=[ChatMessage(role="user", content="Test")],
+        model="gpt-4o",
+        allow_provider_fallback=True,
+    )
+
+    with pytest.raises(httpx.ConnectError):
+        await engine.execute(req, plan=plan)
+
+    # Breaker must NOT have recorded a failure because raw unhandled errors are not normalized ProviderErrors
+    assert breaker.failure_count == 0
 

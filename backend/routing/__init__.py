@@ -1,4 +1,8 @@
-from backend.routing.engine import RoutingEngine, get_routing_engine
+from backend.routing.engine import (
+    InvalidFallbackConfigurationError,
+    RoutingEngine,
+    get_routing_engine,
+)
 from backend.routing.models import (
     ProviderTarget,
     RoutingPlan,
@@ -7,6 +11,7 @@ from backend.routing.models import (
 )
 
 __all__ = [
+    "InvalidFallbackConfigurationError",
     "ProviderTarget",
     "RoutingPlan",
     "RoutingResult",

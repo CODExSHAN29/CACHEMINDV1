@@ -1,13 +1,10 @@
-import asyncio
 import logging
-from typing import AsyncIterator, List, Optional
+from typing import TYPE_CHECKING, AsyncIterator, List, Optional
 from fastapi import HTTPException, status
-import httpx
 
 from backend.app.config import settings
 from backend.normalization.models import NormalizedInferenceRequest
 from backend.providers.base import ProviderError, ProviderErrorKind
-from backend.providers.registry import ProviderRegistry, get_provider_registry
 from backend.resilience.circuit_breaker import (
     CircuitBreakerRegistry,
     get_circuit_breaker_registry,
@@ -20,7 +17,15 @@ from backend.routing.models import (
     StreamingRoutingResult,
 )
 
+if TYPE_CHECKING:
+    from backend.providers.registry import ProviderRegistry
+
 logger = logging.getLogger(__name__)
+
+
+class InvalidFallbackConfigurationError(Exception):
+    """Raised when configured provider fallback target is invalid or misconfigured."""
+    pass
 
 
 def is_plain_text_compatible(request: NormalizedInferenceRequest) -> bool:
@@ -67,10 +72,14 @@ class RoutingEngine:
 
     def __init__(
         self,
-        provider_registry: Optional[ProviderRegistry] = None,
+        provider_registry: Optional["ProviderRegistry"] = None,
         circuit_registry: Optional[CircuitBreakerRegistry] = None,
     ) -> None:
-        self.provider_registry = provider_registry or get_provider_registry()
+        if provider_registry is None:
+            from backend.providers.registry import get_provider_registry
+            self.provider_registry = get_provider_registry()
+        else:
+            self.provider_registry = provider_registry
         self.circuit_registry = circuit_registry or get_circuit_breaker_registry()
 
     def build_routing_plan(self, request: NormalizedInferenceRequest) -> RoutingPlan:
@@ -97,41 +106,43 @@ class RoutingEngine:
                 target_fallback_model = settings.OPENAI_FALLBACK_MODEL
                 expected_provider = "openai"
 
-            if target_fallback_model and expected_provider:
+            if primary_provider in ("openai", "anthropic"):
+                if not target_fallback_model:
+                    raise InvalidFallbackConfigurationError(
+                        f"No fallback model configured for '{primary_provider}' primary provider"
+                    )
+
                 try:
                     resolved_fallback = resolve_model(target_fallback_model)
-                    if resolved_fallback.provider == expected_provider:
-                        # Capability gating
-                        caps = resolved_fallback.capabilities
-                        streaming_ok = not request.stream or caps.streaming
-                        has_system_msg = any(msg.role == "system" for msg in request.messages)
-                        system_ok = not has_system_msg or caps.system_instructions
+                except UnknownModelError as exc:
+                    raise InvalidFallbackConfigurationError(
+                        f"Configured fallback model '{target_fallback_model}' could not be resolved in catalog"
+                    ) from exc
 
-                        if streaming_ok and system_ok:
-                            fallbacks.append(
-                                ProviderTarget(
-                                    provider=expected_provider,
-                                    model=resolved_fallback.canonical_model,
-                                )
-                            )
-                        else:
-                            logger.info(
-                                "Fallback model '%s' rejected due to capability mismatch: streaming_ok=%s, system_ok=%s",
-                                target_fallback_model,
-                                streaming_ok,
-                                system_ok,
-                            )
-                    else:
-                        logger.warning(
-                            "Configured fallback model '%s' resolved to provider '%s', expected '%s'",
-                            target_fallback_model,
-                            resolved_fallback.provider,
-                            expected_provider,
+                if resolved_fallback.provider != expected_provider:
+                    raise InvalidFallbackConfigurationError(
+                        f"Configured fallback model '{target_fallback_model}' resolved to provider '{resolved_fallback.provider}', expected '{expected_provider}'"
+                    )
+
+                # Capability gating
+                caps = resolved_fallback.capabilities
+                streaming_ok = not request.stream or caps.streaming
+                has_system_msg = any(msg.role == "system" for msg in request.messages)
+                system_ok = not has_system_msg or caps.system_instructions
+
+                if streaming_ok and system_ok:
+                    fallbacks.append(
+                        ProviderTarget(
+                            provider=expected_provider,
+                            model=resolved_fallback.canonical_model,
                         )
-                except UnknownModelError:
-                    logger.warning(
-                        "Configured fallback model '%s' could not be resolved in catalog",
+                    )
+                else:
+                    logger.info(
+                        "Fallback model '%s' rejected due to capability mismatch: streaming_ok=%s, system_ok=%s",
                         target_fallback_model,
+                        streaming_ok,
+                        system_ok,
                     )
 
         return RoutingPlan(primary=primary_target, fallbacks=fallbacks)
@@ -150,6 +161,7 @@ class RoutingEngine:
         Determines whether an exception represents an upstream availability failure that
         should trip the provider circuit breaker. Client faults (400, 401, 403, 404,
         context length exceeded, content filter, configuration error) must NOT trip the circuit.
+        Governed solely by normalized ProviderError contracts.
         """
         if isinstance(exc, ProviderError):
             if exc.kind in (
@@ -160,20 +172,14 @@ class RoutingEngine:
                 ProviderErrorKind.RATE_LIMIT_EXCEEDED,
             ) or (exc.status_code and exc.status_code in (429, 500, 502, 503, 504, 529)):
                 return True
-            return False
-
-        if isinstance(exc, (asyncio.TimeoutError, TimeoutError, httpx.TimeoutException, httpx.RequestError)):
-            return True
-
         return False
 
     def _is_retryable_error(self, exc: Exception) -> bool:
-        """Determines whether an exception warrants attempting a fallback provider."""
-        if isinstance(exc, ProviderError):
-            return exc.retryable
-        if isinstance(exc, (asyncio.TimeoutError, TimeoutError, httpx.TimeoutException, httpx.RequestError)):
-            return True
-        return False
+        """
+        Determines whether an exception warrants attempting a fallback provider.
+        Governed solely by normalized ProviderError contracts.
+        """
+        return isinstance(exc, ProviderError) and exc.retryable
 
     async def execute(
         self,

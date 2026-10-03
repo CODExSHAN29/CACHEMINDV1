@@ -38,15 +38,15 @@ _MODEL_CATALOG: Dict[str, ResolvedModelTarget] = {
     "o3-mini": ResolvedModelTarget("openai", "o3-mini", ModelCapabilities(tools=True, structured_output=True, multimodal=False, system_instructions=True)),
     "o4-mini": ResolvedModelTarget("openai", "o4-mini", ModelCapabilities(tools=True, structured_output=True, multimodal=True, system_instructions=True)),
 
-    # Anthropic Models (Adapter currently preserves text & system instructions, no tools or structured_output translation)
-    "claude-3-5-sonnet-20241022": ResolvedModelTarget("anthropic", "claude-3-5-sonnet-20241022", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
-    "claude-3-5-sonnet-latest": ResolvedModelTarget("anthropic", "claude-3-5-sonnet-20241022", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
-    "claude-3-5-haiku-20241022": ResolvedModelTarget("anthropic", "claude-3-5-haiku-20241022", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
-    "claude-3-5-haiku-latest": ResolvedModelTarget("anthropic", "claude-3-5-haiku-20241022", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
-    "claude-3-opus-20240229": ResolvedModelTarget("anthropic", "claude-3-opus-20240229", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
-    "claude-3-opus-latest": ResolvedModelTarget("anthropic", "claude-3-opus-20240229", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
-    "claude-3-sonnet-20240229": ResolvedModelTarget("anthropic", "claude-3-sonnet-20240229", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
-    "claude-3-haiku-20240307": ResolvedModelTarget("anthropic", "claude-3-haiku-20240307", ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True)),
+    # Anthropic Models (Adapter currently preserves text & system instructions, no tools, structured_output, or multimodal translation)
+    "claude-3-5-sonnet-20241022": ResolvedModelTarget("anthropic", "claude-3-5-sonnet-20241022", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "claude-3-5-sonnet-latest": ResolvedModelTarget("anthropic", "claude-3-5-sonnet-latest", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "claude-3-5-haiku-20241022": ResolvedModelTarget("anthropic", "claude-3-5-haiku-20241022", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "claude-3-5-haiku-latest": ResolvedModelTarget("anthropic", "claude-3-5-haiku-latest", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "claude-3-opus-20240229": ResolvedModelTarget("anthropic", "claude-3-opus-20240229", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "claude-3-opus-latest": ResolvedModelTarget("anthropic", "claude-3-opus-latest", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "claude-3-sonnet-20240229": ResolvedModelTarget("anthropic", "claude-3-sonnet-20240229", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
+    "claude-3-haiku-20240307": ResolvedModelTarget("anthropic", "claude-3-haiku-20240307", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
 
     # Ollama / Local Open-Source Models
     "llama3": ResolvedModelTarget("ollama", "llama3", ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True)),
@@ -106,7 +106,7 @@ def resolve_model(model_name: str) -> ResolvedModelTarget:
         return ResolvedModelTarget(
             provider="anthropic",
             canonical_model=m,
-            capabilities=ModelCapabilities(tools=False, structured_output=False, multimodal=True, system_instructions=True),
+            capabilities=ModelCapabilities(tools=False, structured_output=False, multimodal=False, system_instructions=True),
         )
 
     if any(m_lower.startswith(prefix) for prefix in ("llama", "mistral", "mixtral", "deepseek", "phi", "qwen", "gemma")):
