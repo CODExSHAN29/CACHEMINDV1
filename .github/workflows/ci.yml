@@ -125,16 +125,21 @@ jobs:
           echo "Waiting for CacheMind Gateway /health/ready probe..."
           READY=0
           for i in $(seq 1 60); do
-            if curl -sf http://127.0.0.1:8000/health/ready > /dev/null 2>&1; then
-              echo "Gateway is ready (attempt $i)"
+            HTTP_CODE=$(curl -s -o /tmp/ready_response.json -w "%{http_code}" http://127.0.0.1:8000/health/ready || echo "000")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Gateway is ready (attempt $i): HTTP $HTTP_CODE"
               READY=1
               break
             fi
+            echo "Attempt $i: Gateway returned HTTP $HTTP_CODE (retrying in 2s)..."
             sleep 2
           done
 
           if [ $READY -ne 1 ]; then
             echo "ERROR: Gateway failed to become ready within 120s"
+            echo "--- Last Readiness Response ---"
+            cat /tmp/ready_response.json || true
+            echo ""
             echo "--- Container Status ---"
             docker compose -f docker-compose.verify.yml ps
             echo "--- Migration Logs ---"
