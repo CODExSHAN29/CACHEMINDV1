@@ -50,6 +50,16 @@ class Settings(BaseSettings):
             return v.replace("sqlite://", "sqlite+aiosqlite://", 1)
         return v
 
+    @field_validator("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "QDRANT_API_KEY", "STRIPE_SECRET_KEY", mode="before")
+    @classmethod
+    def empty_or_placeholder_to_none(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            v_str = v.strip()
+            if not v_str or v_str.startswith("your_") or v_str.startswith("sk-placeholder"):
+                return None
+            return v_str
+        return v
+
     # Cache Backend (L1)
     CACHE_BACKEND: Literal["memory", "redis"] = "memory"
     REDIS_URL: str = "redis://localhost:6379/0"

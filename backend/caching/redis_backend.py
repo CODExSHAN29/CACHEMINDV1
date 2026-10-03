@@ -60,12 +60,17 @@ class RedisExactCache(ExactCacheBackend):
             try:
                 from redis.asyncio.sentinel import Sentinel
                 hosts = self._parse_sentinel_hosts(self.sentinel_hosts)
+                sentinel_kwargs: dict[str, Any] = {
+                    "socket_timeout": self.socket_timeout,
+                    "decode_responses": True,
+                }
+                if self.password:
+                    sentinel_kwargs["password"] = self.password
+                if self.ssl:
+                    sentinel_kwargs["ssl"] = True
                 sentinel = Sentinel(
                     hosts,
-                    socket_timeout=self.socket_timeout,
-                    password=self.password,
-                    ssl=self.ssl,
-                    decode_responses=True,
+                    **sentinel_kwargs,
                 )
                 self._client = sentinel.master_for(self.sentinel_master)
                 logger.info("Initialized Redis Sentinel client for master '%s'", self.sentinel_master)
@@ -76,27 +81,40 @@ class RedisExactCache(ExactCacheBackend):
         if self.cluster_mode:
             try:
                 from redis.asyncio.cluster import RedisCluster
+                cluster_kwargs: dict[str, Any] = {
+                    "socket_timeout": self.socket_timeout,
+                    "decode_responses": True,
+                }
+                if self.max_connections:
+                    cluster_kwargs["max_connections"] = self.max_connections
+                if self.password:
+                    cluster_kwargs["password"] = self.password
+                if self.ssl:
+                    cluster_kwargs["ssl"] = True
                 self._client = RedisCluster.from_url(
                     self.redis_url,
-                    socket_timeout=self.socket_timeout,
-                    password=self.password,
-                    ssl=self.ssl,
-                    max_connections=self.max_connections,
-                    decode_responses=True,
+                    **cluster_kwargs,
                 )
                 logger.info("Initialized Redis Cluster client")
                 return self._client
             except Exception as exc:
                 logger.warning("Failed to initialize Redis Cluster: %s, falling back to standalone", exc)
 
+        client_kwargs: dict[str, Any] = {
+            "socket_timeout": self.socket_timeout,
+            "socket_connect_timeout": self.socket_timeout,
+            "decode_responses": True,
+        }
+        if self.max_connections:
+            client_kwargs["max_connections"] = self.max_connections
+        if self.password:
+            client_kwargs["password"] = self.password
+        if self.ssl:
+            client_kwargs["ssl"] = True
+
         self._client = redis.from_url(
             self.redis_url,
-            socket_timeout=self.socket_timeout,
-            socket_connect_timeout=self.socket_timeout,
-            password=self.password,
-            ssl=self.ssl,
-            max_connections=self.max_connections,
-            decode_responses=True,
+            **client_kwargs,
         )
         return self._client
 
