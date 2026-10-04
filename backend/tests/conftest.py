@@ -101,6 +101,8 @@ def setup_test_singletons():
 
     from backend.caching.coalescer import RequestCoalescer, set_request_coalescer
     set_request_coalescer(RequestCoalescer())
+    from backend.inference.pipeline import set_inference_pipeline
+    set_inference_pipeline(None)
 
     settings.SEMANTIC_CACHE_MODE = "safe"
 
