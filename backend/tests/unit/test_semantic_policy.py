@@ -336,5 +336,14 @@ def test_policy_version_scope_isolation():
         model="gpt-4o",
         policy_version="v2",
     )
+    hash_v3 = compute_scope_hash(
+        tenant_id="tenant_1",
+        project_id="proj_1",
+        provider="openai",
+        model="gpt-4o",
+        policy_version="v3",
+    )
     assert hash_v1 != hash_v2
-    assert SEMANTIC_POLICY_VERSION == "v2"
+    assert hash_v2 != hash_v3
+    assert hash_v1 != hash_v3
+    assert SEMANTIC_POLICY_VERSION == "v3"
