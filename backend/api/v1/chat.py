@@ -19,6 +19,7 @@ from backend.ratelimit.limiter import get_rate_limiter
 from backend.routing.engine import InvalidFallbackConfigurationError
 from backend.routing.model_catalog import UnknownModelError, resolve_model
 from backend.security.pii import PIISanitizer, PIIBlockedException, resolve_pii_mode
+from backend.streaming.sse import create_cached_stream_generator
 
 logger = logging.getLogger(__name__)
 
@@ -166,8 +167,8 @@ async def create_chat_completion(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(fe),
         )
-    except Exception as exc:
-        logger.exception("Inference execution failed: %s", exc)
+    except Exception:
+        logger.exception("Inference execution failed")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="An unexpected upstream error occurred.",
@@ -175,7 +176,29 @@ async def create_chat_completion(
 
     response_headers = {**result.headers, **rl_headers}
 
-    # 4. Serialize HTTP Response
+    # 4. Serialize HTTP Response with Protocol Presentation Formatting
+    if result.cache_status in ("EXACT_HIT", "L2_HIT") and result.response_body:
+        if norm_req.stream:
+            stream_gen = create_cached_stream_generator(
+                cached_payload=result.response_body,
+                request_id=request_id,
+                model=raw_requested_model,
+            )
+            return StreamingResponse(
+                stream_gen,
+                media_type="text/event-stream",
+                headers=response_headers,
+            )
+        formatted_payload = OpenAIAdapter.format_cached_response(
+            cached_data=result.response_body,
+            request_id=request_id,
+            model=raw_requested_model,
+        )
+        return JSONResponse(
+            content=formatted_payload,
+            headers=response_headers,
+        )
+
     if result.is_stream and result.stream_generator is not None:
         return StreamingResponse(
             result.stream_generator,

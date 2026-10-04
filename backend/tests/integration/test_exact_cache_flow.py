@@ -120,3 +120,108 @@ async def test_concurrent_request_coalescing_stampede_prevention(
     # Single-flight coalescing ensures upstream provider was called only once despite 5 concurrent requests!
     assert provider.call_count == initial_provider_calls + 1
 
+
+@pytest.mark.asyncio
+async def test_exact_cache_alias_model_presentation_and_telemetry(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    tenant_a_fixtures: dict,
+):
+    """
+    Verifies that for alias models (e.g. 'mock' -> 'mock-model'):
+    1. Response body returns client-facing raw requested model ('mock').
+    2. Headers and DB RequestLog correctly reflect actual canonical model ('mock-model') and requested model ('mock').
+    """
+    raw_key = tenant_a_fixtures["raw_key"]
+    headers = {"Authorization": f"Bearer {raw_key}"}
+
+    payload = {
+        "model": "mock",
+        "messages": [{"role": "user", "content": "Explain photosynthesis briefly."}],
+        "temperature": 0.0,
+    }
+
+    # 1. First Request -> MISS
+    resp1 = await async_client.post("/v1/chat/completions", headers=headers, json=payload)
+    assert resp1.status_code == 200
+    assert resp1.headers["X-CacheMind-Status"] == "MISS"
+    assert resp1.headers["X-CacheMind-Provider"] == "mock"
+    assert resp1.headers["X-CacheMind-Model"] == "mock-model"
+    body1 = resp1.json()
+    assert body1["model"] in ("mock", "mock-model")
+
+    # 2. Second Request -> EXACT HIT
+    resp2 = await async_client.post("/v1/chat/completions", headers=headers, json=payload)
+    assert resp2.status_code == 200
+    assert resp2.headers["X-CacheMind-Status"] == "EXACT_HIT"
+    assert resp2.headers["X-CacheMind-Provider"] == "mock"
+    assert resp2.headers["X-CacheMind-Model"] == "mock-model"
+    body2 = resp2.json()
+    assert body2["model"] == "mock"
+    assert (
+        body2["choices"][0]["message"]["content"]
+        == body1["choices"][0]["message"]["content"]
+    )
+
+    # 3. Verify Telemetry & FinOps Attribution in DB
+    result = await db_session.execute(
+        select(RequestLog)
+        .where(RequestLog.requested_model == "mock")
+        .order_by(RequestLog.created_at.asc())
+    )
+    logs = result.scalars().all()
+    assert len(logs) >= 2
+    exact_hit_log = logs[-1]
+    assert exact_hit_log.cache_status == "EXACT_HIT"
+    assert exact_hit_log.requested_model == "mock"
+    assert exact_hit_log.actual_model == "mock-model"
+    assert exact_hit_log.provider == "mock"
+    assert exact_hit_log.upstream_called is False
+
+
+@pytest.mark.asyncio
+async def test_exact_cache_streaming_alias_model_presentation(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    tenant_a_fixtures: dict,
+):
+    """
+    Verifies that cached SSE streaming preserves client-facing raw requested model ('mock') in chunks
+    while diagnostic headers reflect canonical model ('mock-model').
+    """
+    import json
+
+    raw_key = tenant_a_fixtures["raw_key"]
+    headers = {"Authorization": f"Bearer {raw_key}"}
+
+    payload = {
+        "model": "mock",
+        "messages": [{"role": "user", "content": "Streaming alias test message."}],
+        "temperature": 0.0,
+        "stream": False,
+    }
+
+    # Prime cache with non-streaming MISS
+    resp_prime = await async_client.post("/v1/chat/completions", headers=headers, json=payload)
+    assert resp_prime.status_code == 200
+
+    # Request cached streaming
+    payload_streaming = dict(payload)
+    payload_streaming["stream"] = True
+    resp_stream = await async_client.post(
+        "/v1/chat/completions", headers=headers, json=payload_streaming
+    )
+    assert resp_stream.status_code == 200
+    assert resp_stream.headers["X-CacheMind-Status"] == "EXACT_HIT"
+    assert resp_stream.headers["X-CacheMind-Provider"] == "mock"
+    assert resp_stream.headers["X-CacheMind-Model"] == "mock-model"
+
+    # Verify SSE chunk model presentation
+    lines = resp_stream.text.strip().split("\n")
+    data_lines = [l for l in lines if l.startswith("data: ") and not l.startswith("data: [DONE]")]
+    assert len(data_lines) > 0
+    for line in data_lines:
+        chunk = json.loads(line[len("data: "):])
+        assert chunk["model"] == "mock"
+
+

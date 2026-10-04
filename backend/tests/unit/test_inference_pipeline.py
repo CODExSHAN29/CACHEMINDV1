@@ -56,7 +56,7 @@ async def test_inference_pipeline_exact_cache_hit(
     sample_identity: AuthenticatedIdentity,
     sample_norm_req: NormalizedInferenceRequest,
 ):
-    """Verifies that L1 exact cache hit returns an InferenceResult without calling upstream routing."""
+    """Verifies that L1 exact cache hit returns an InferenceResult with raw payload and cached ownership."""
     pipeline = get_inference_pipeline()
     exact_hash = compute_exact_request_hash(
         tenant_id=sample_identity.tenant_id,
@@ -262,7 +262,7 @@ async def test_inference_pipeline_streaming_cache_hit(
     sample_identity: AuthenticatedIdentity,
     sample_norm_req: NormalizedInferenceRequest,
 ):
-    """Verifies streaming cache hit yields SSE formatted tokens."""
+    """Verifies streaming cache hit returns raw response body with is_stream=True."""
     pipeline = get_inference_pipeline()
     exact_hash = compute_exact_request_hash(
         tenant_id=sample_identity.tenant_id,
@@ -312,15 +312,8 @@ async def test_inference_pipeline_streaming_cache_hit(
     assert isinstance(result, InferenceResult)
     assert result.cache_status == "EXACT_HIT"
     assert result.is_stream is True
-    assert result.stream_generator is not None
-
-    chunks = []
-    async for chunk in result.stream_generator:
-        chunks.append(chunk)
-
-    assert len(chunks) > 0
-    full_stream = "".join(chunks)
-    assert "Streamed cached content." in full_stream or any("Streamed" in c for c in chunks)
+    assert result.response_body is not None
+    assert result.response_body["choices"][0]["message"]["content"] == "Streamed cached content."
 
 
 @pytest.mark.asyncio
@@ -415,12 +408,19 @@ async def test_inference_pipeline_provider_error_handling(
 
 def test_inference_pipeline_architectural_neutrality():
     """
-    AST inspection verifying that backend.inference has 0 imports of HTTP frameworks (fastapi, starlette)
-    and 0 imports of concrete providers (OpenAIProvider, AnthropicProvider, OllamaProvider).
+    AST inspection verifying that backend.inference has 0 imports of HTTP frameworks (fastapi, starlette),
+    0 imports of concrete providers (OpenAIProvider, AnthropicProvider, OllamaProvider),
+    and 0 imports of presentation/wire-format adapters (OpenAIAdapter, create_cached_stream_generator).
     """
     inference_dir = os.path.join("backend", "inference")
     forbidden_http_modules = {"fastapi", "starlette"}
-    forbidden_provider_classes = {"OpenAIProvider", "AnthropicProvider", "OllamaProvider"}
+    forbidden_symbols = {
+        "OpenAIProvider",
+        "AnthropicProvider",
+        "OllamaProvider",
+        "OpenAIAdapter",
+        "create_cached_stream_generator",
+    }
 
     for root, _, files in os.walk(inference_dir):
         for file in files:
@@ -436,8 +436,8 @@ def test_inference_pipeline_architectural_neutrality():
                             assert root_pkg not in forbidden_http_modules, (
                                 f"{file_path} illegally imports HTTP module '{alias.name}'"
                             )
-                            assert alias.name not in forbidden_provider_classes, (
-                                f"{file_path} illegally imports concrete provider '{alias.name}'"
+                            assert alias.name not in forbidden_symbols, (
+                                f"{file_path} illegally imports forbidden symbol '{alias.name}'"
                             )
                     elif isinstance(node, ast.ImportFrom):
                         if node.module:
@@ -446,6 +446,6 @@ def test_inference_pipeline_architectural_neutrality():
                                 f"{file_path} illegally imports from HTTP module '{node.module}'"
                             )
                         for alias in node.names:
-                            assert alias.name not in forbidden_provider_classes, (
-                                f"{file_path} illegally imports concrete provider '{alias.name}' from '{node.module}'"
+                            assert alias.name not in forbidden_symbols, (
+                                f"{file_path} illegally imports forbidden symbol '{alias.name}' from '{node.module}'"
                             )
