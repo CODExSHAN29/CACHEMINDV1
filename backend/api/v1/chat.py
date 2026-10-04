@@ -22,6 +22,7 @@ from backend.routing.engine import (
     InvalidFallbackConfigurationError,
     get_routing_engine,
 )
+from backend.routing.model_catalog import UnknownModelError, resolve_model
 from backend.security.pii import PIISanitizer, PIIBlockedException, resolve_pii_mode
 from backend.streaming.accumulator import StreamAccumulator
 from backend.streaming.sse import create_cached_stream_generator
@@ -54,6 +55,19 @@ async def create_chat_completion(
     # 1. Parse & Normalize Request
     try:
         norm_req = OpenAIAdapter.parse_request(payload)
+        raw_requested_model = norm_req.model
+
+        # Early Authoritative Model Resolution & Fail-Fast Validation
+        try:
+            resolved_target = resolve_model(norm_req.model)
+        except UnknownModelError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            )
+
+        norm_req.provider = resolved_target.provider
+        norm_req.model = resolved_target.canonical_model
 
         # Check headers for namespace and tags if not present in body
         hdr_ns = request.headers.get("X-CacheMind-Namespace")
@@ -141,9 +155,13 @@ async def create_chat_completion(
             detail="API key role does not permit inference operations.",
         )
 
-    # 3. Derive Exact Hash (Strictly bound to authenticated tenant & project)
+    # 3. Derive Exact Hash (Strictly bound to authenticated tenant, project, resolved provider & model)
     exact_request_hash = compute_exact_request_hash(
-        identity.tenant_id, identity.project_id, norm_req
+        tenant_id=identity.tenant_id,
+        project_id=identity.project_id,
+        provider=norm_req.provider,
+        model=norm_req.model,
+        request=norm_req,
     )
 
     cache_backend = get_cache_backend()
@@ -165,7 +183,7 @@ async def create_chat_completion(
         await cache_backend.increment_hit(identity.project_id, exact_request_hash)
 
         response_body = OpenAIAdapter.format_cached_response(
-            cached.response_payload, request_id, norm_req.model
+            cached.response_payload, request_id, raw_requested_model
         )
 
         gateway_latency_ms = (time.perf_counter_ns() - gateway_start_ns) / 1_000_000
@@ -179,9 +197,9 @@ async def create_chat_completion(
             request_id=request_id,
             tenant_id=identity.tenant_id,
             project_id=identity.project_id,
-            provider=norm_req.provider,
-            requested_model=norm_req.model,
-            actual_model=response_body.get("model", norm_req.model),
+            provider=cached.provider or norm_req.provider,
+            requested_model=raw_requested_model,
+            actual_model=cached.model or norm_req.model,
             cache_status=cache_status,
             exact_request_hash=exact_request_hash,
             gateway_latency_ms=gateway_latency_ms,
@@ -197,8 +215,8 @@ async def create_chat_completion(
 
         get_metrics_collector().record_request(
             tenant_id=identity.tenant_id,
-            provider=norm_req.provider,
-            model=norm_req.model,
+            provider=cached.provider or norm_req.provider,
+            model=raw_requested_model,
             cache_status="EXACT_HIT",
             gateway_latency_ms=gateway_latency_ms,
             upstream_latency_ms=None,
@@ -215,7 +233,7 @@ async def create_chat_completion(
             "X-CacheMind-Gateway-Latency-Ms": f"{gateway_latency_ms:.3f}",
             "X-CacheMind-Lookup-Ms": f"{exact_cache_lookup_ms:.3f}",
             "X-CacheMind-Provider": cached.provider or norm_req.provider,
-            "X-CacheMind-Model": response_body.get("model", norm_req.model),
+            "X-CacheMind-Model": cached.model or norm_req.model,
             "X-CacheMind-Fallback-Hops": "0",
             "X-CacheMind-Coalesced": "true" if was_coalesced else "false",
             **rl_headers,
@@ -225,7 +243,7 @@ async def create_chat_completion(
             stream_gen = create_cached_stream_generator(
                 cached_payload=cached.response_payload,
                 request_id=request_id,
-                model=norm_req.model,
+                model=raw_requested_model,
             )
             return StreamingResponse(stream_gen, media_type="text/event-stream", headers=headers)
 
@@ -292,7 +310,7 @@ async def create_chat_completion(
 
                         cleaned_payload = {k: v for k, v in cand_payload.items() if not k.startswith("__cachemind_")}
                         response_body = OpenAIAdapter.format_cached_response(
-                            cleaned_payload, request_id, norm_req.model
+                            cleaned_payload, request_id, raw_requested_model
                         )
 
                         gateway_latency_ms = (time.perf_counter_ns() - gateway_start_ns) / 1_000_000
@@ -306,7 +324,7 @@ async def create_chat_completion(
                             tenant_id=identity.tenant_id,
                             project_id=identity.project_id,
                             provider=norm_req.provider,
-                            requested_model=norm_req.model,
+                            requested_model=raw_requested_model,
                             actual_model=response_body.get("model", norm_req.model),
                             cache_status=cache_status,
                             exact_request_hash=exact_request_hash,
@@ -324,7 +342,7 @@ async def create_chat_completion(
                         get_metrics_collector().record_request(
                             tenant_id=identity.tenant_id,
                             provider=norm_req.provider,
-                            model=norm_req.model,
+                            model=raw_requested_model,
                             cache_status="L2_HIT",
                             gateway_latency_ms=gateway_latency_ms,
                             upstream_latency_ms=None,
@@ -351,7 +369,7 @@ async def create_chat_completion(
                             stream_gen = create_cached_stream_generator(
                                 cached_payload=cleaned_payload,
                                 request_id=request_id,
-                                model=norm_req.model,
+                                model=raw_requested_model,
                             )
                             return StreamingResponse(stream_gen, media_type="text/event-stream", headers=headers)
 
@@ -383,6 +401,8 @@ async def create_chat_completion(
                 exact_cache_lookup_ms=exact_cache_lookup_ms,
                 db=db,
                 provider_used=streaming_result.provider_used,
+                model_used=streaming_result.model_used,
+                raw_requested_model=raw_requested_model,
                 fallback_hops=streaming_result.fallback_hops,
             )
             headers = {
@@ -407,7 +427,7 @@ async def create_chat_completion(
                 tenant_id=identity.tenant_id,
                 project_id=identity.project_id,
                 provider=norm_req.provider,
-                requested_model=norm_req.model,
+                requested_model=raw_requested_model,
                 actual_model=norm_req.model,
                 cache_status="ERROR",
                 exact_request_hash=exact_request_hash,
@@ -429,7 +449,7 @@ async def create_chat_completion(
                 tenant_id=identity.tenant_id,
                 project_id=identity.project_id,
                 provider=norm_req.provider,
-                requested_model=norm_req.model,
+                requested_model=raw_requested_model,
                 actual_model=norm_req.model,
                 cache_status="ERROR",
                 exact_request_hash=exact_request_hash,
@@ -450,7 +470,7 @@ async def create_chat_completion(
                 tenant_id=identity.tenant_id,
                 project_id=identity.project_id,
                 provider=norm_req.provider,
-                requested_model=norm_req.model,
+                requested_model=raw_requested_model,
                 actual_model=norm_req.model,
                 cache_status="ERROR",
                 exact_request_hash=exact_request_hash,
@@ -487,7 +507,7 @@ async def create_chat_completion(
             tenant_id=identity.tenant_id,
             project_id=identity.project_id,
             provider=norm_req.provider,
-            requested_model=norm_req.model,
+            requested_model=raw_requested_model,
             actual_model=norm_req.model,
             cache_status="ERROR",
             exact_request_hash=exact_request_hash,
@@ -509,7 +529,7 @@ async def create_chat_completion(
             tenant_id=identity.tenant_id,
             project_id=identity.project_id,
             provider=norm_req.provider,
-            requested_model=norm_req.model,
+            requested_model=raw_requested_model,
             actual_model=norm_req.model,
             cache_status="ERROR",
             exact_request_hash=exact_request_hash,
@@ -530,7 +550,7 @@ async def create_chat_completion(
             tenant_id=identity.tenant_id,
             project_id=identity.project_id,
             provider=norm_req.provider,
-            requested_model=norm_req.model,
+            requested_model=raw_requested_model,
             actual_model=norm_req.model,
             cache_status="ERROR",
             exact_request_hash=exact_request_hash,
@@ -553,9 +573,45 @@ async def create_chat_completion(
         except Exception:
             ttl_seconds = settings.DEFAULT_CACHE_TTL_SECONDS
 
+    # Derive Backfill Exact Hash & Scope Hash under Executed Target
+    if routing_result.provider_used != norm_req.provider or provider_resp.model != norm_req.model:
+        backfill_norm_req = norm_req.model_copy(
+            update={"provider": routing_result.provider_used, "model": provider_resp.model}
+        )
+        backfill_exact_hash = compute_exact_request_hash(
+            tenant_id=identity.tenant_id,
+            project_id=identity.project_id,
+            provider=routing_result.provider_used,
+            model=provider_resp.model,
+            request=backfill_norm_req,
+        )
+        backfill_scope_hash = compute_scope_hash(
+            tenant_id=identity.tenant_id,
+            project_id=identity.project_id,
+            provider=routing_result.provider_used,
+            model=provider_resp.model,
+            system_prompt=system_prompt,
+            temperature=norm_req.temperature,
+            namespace=norm_req.namespace,
+            tags=norm_req.tags,
+            top_p=norm_req.top_p,
+            max_tokens=norm_req.max_tokens,
+            max_completion_tokens=norm_req.max_completion_tokens,
+            presence_penalty=norm_req.presence_penalty,
+            frequency_penalty=norm_req.frequency_penalty,
+            seed=norm_req.seed,
+            stop=norm_req.stop,
+            response_format=norm_req.response_format,
+            tools=norm_req.tools,
+            tool_choice=norm_req.tool_choice,
+        )
+    else:
+        backfill_exact_hash = exact_request_hash
+        backfill_scope_hash = scope_hash
+
     # 7a. L1 Exact Cache Set
     cached_entry = CachedResponse(
-        exact_request_hash=exact_request_hash,
+        exact_request_hash=backfill_exact_hash,
         response_payload=provider_resp.raw_response,
         provider=routing_result.provider_used,
         model=provider_resp.model,
@@ -565,7 +621,7 @@ async def create_chat_completion(
     )
     await cache_backend.set(
         identity.project_id,
-        exact_request_hash,
+        backfill_exact_hash,
         cached_entry,
         ttl_seconds,
     )
@@ -583,8 +639,8 @@ async def create_chat_completion(
                 semantic_payload["__cachemind_system_prompt__"] = system_prompt
 
                 await semantic_service.backend.insert(
-                    scope_hash=scope_hash,
-                    exact_request_hash=exact_request_hash,
+                    scope_hash=backfill_scope_hash,
+                    exact_request_hash=backfill_exact_hash,
                     vector=query_vector,
                     response_payload=semantic_payload,
                     created_at=time.time(),
@@ -614,7 +670,7 @@ async def create_chat_completion(
         tenant_id=identity.tenant_id,
         project_id=identity.project_id,
         provider=routing_result.provider_used,
-        requested_model=norm_req.model,
+        requested_model=raw_requested_model,
         actual_model=provider_resp.model,
         cache_status=cache_status,
         exact_request_hash=exact_request_hash,
@@ -632,7 +688,7 @@ async def create_chat_completion(
     get_metrics_collector().record_request(
         tenant_id=identity.tenant_id,
         provider=routing_result.provider_used,
-        model=norm_req.model,
+        model=raw_requested_model,
         cache_status="MISS",
         gateway_latency_ms=gateway_latency_ms,
         upstream_latency_ms=upstream_latency_ms,

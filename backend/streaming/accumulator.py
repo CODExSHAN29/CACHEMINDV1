@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.config import settings
 from backend.auth.identity import AuthenticatedIdentity
 from backend.caching.factory import get_cache_backend
+from backend.caching.fingerprint import compute_exact_request_hash, compute_scope_hash
 from backend.caching.models import CachedResponse
 from backend.normalization.models import NormalizedInferenceRequest
 from backend.metrics.collector import get_metrics_collector
@@ -39,6 +40,8 @@ class StreamAccumulator:
         exact_cache_lookup_ms: float,
         db: AsyncSession,
         provider_used: Optional[str] = None,
+        model_used: Optional[str] = None,
+        raw_requested_model: Optional[str] = None,
         fallback_hops: int = 0,
     ) -> None:
         self.upstream_stream = upstream_stream
@@ -53,13 +56,15 @@ class StreamAccumulator:
         self.exact_cache_lookup_ms = exact_cache_lookup_ms
         self.db = db
         self.provider_used = provider_used or norm_req.provider
+        self.model_used = model_used or norm_req.model
+        self.raw_requested_model = raw_requested_model or norm_req.model
         self.fallback_hops = fallback_hops
 
         # Accumulation State
         self.accumulated_chunks: List[str] = []
         self.accumulated_role: str = "assistant"
         self.accumulated_finish_reason: str = "stop"
-        self.accumulated_model: str = norm_req.model
+        self.accumulated_model: str = model_used or norm_req.model
         self.accumulated_system_fingerprint: Optional[str] = None
         self.accumulated_usage: Optional[Dict[str, int]] = None
         self.created_ts: Optional[int] = None
@@ -174,11 +179,47 @@ class StreamAccumulator:
             except Exception:
                 ttl_seconds = settings.DEFAULT_CACHE_TTL_SECONDS
 
+        # Derive Backfill Exact Hash & Scope Hash under Executed Target
+        if self.provider_used != self.norm_req.provider or self.accumulated_model != self.norm_req.model:
+            backfill_norm_req = self.norm_req.model_copy(
+                update={"provider": self.provider_used, "model": self.accumulated_model}
+            )
+            backfill_exact_hash = compute_exact_request_hash(
+                tenant_id=self.identity.tenant_id,
+                project_id=self.identity.project_id,
+                provider=self.provider_used,
+                model=self.accumulated_model,
+                request=backfill_norm_req,
+            )
+            backfill_scope_hash = compute_scope_hash(
+                tenant_id=self.identity.tenant_id,
+                project_id=self.identity.project_id,
+                provider=self.provider_used,
+                model=self.accumulated_model,
+                system_prompt=self.system_prompt,
+                temperature=self.norm_req.temperature,
+                namespace=self.norm_req.namespace,
+                tags=self.norm_req.tags,
+                top_p=self.norm_req.top_p,
+                max_tokens=self.norm_req.max_tokens,
+                max_completion_tokens=self.norm_req.max_completion_tokens,
+                presence_penalty=self.norm_req.presence_penalty,
+                frequency_penalty=self.norm_req.frequency_penalty,
+                seed=self.norm_req.seed,
+                stop=self.norm_req.stop,
+                response_format=self.norm_req.response_format,
+                tools=self.norm_req.tools,
+                tool_choice=self.norm_req.tool_choice,
+            )
+        else:
+            backfill_exact_hash = self.exact_request_hash
+            backfill_scope_hash = self.scope_hash
+
         # 2. Backfill L1 Exact Cache
         try:
             cache_backend = get_cache_backend()
             cached_entry = CachedResponse(
-                exact_request_hash=self.exact_request_hash,
+                exact_request_hash=backfill_exact_hash,
                 response_payload=raw_response,
                 provider=self.provider_used,
                 model=self.accumulated_model,
@@ -188,7 +229,7 @@ class StreamAccumulator:
             )
             await cache_backend.set(
                 self.identity.project_id,
-                self.exact_request_hash,
+                backfill_exact_hash,
                 cached_entry,
                 ttl_seconds,
             )
@@ -206,8 +247,8 @@ class StreamAccumulator:
                     semantic_payload["__cachemind_system_prompt__"] = self.system_prompt
 
                     await semantic_service.backend.insert(
-                        scope_hash=self.scope_hash,
-                        exact_request_hash=self.exact_request_hash,
+                        scope_hash=backfill_scope_hash,
+                        exact_request_hash=backfill_exact_hash,
                         vector=query_vector,
                         response_payload=semantic_payload,
                         created_at=time.time(),
@@ -236,7 +277,7 @@ class StreamAccumulator:
                 tenant_id=self.identity.tenant_id,
                 project_id=self.identity.project_id,
                 provider=self.provider_used,
-                requested_model=self.norm_req.model,
+                requested_model=self.raw_requested_model,
                 actual_model=self.accumulated_model,
                 cache_status="MISS",
                 exact_request_hash=self.exact_request_hash,
@@ -253,7 +294,7 @@ class StreamAccumulator:
             get_metrics_collector().record_request(
                 tenant_id=self.identity.tenant_id,
                 provider=self.provider_used,
-                model=self.norm_req.model,
+                model=self.raw_requested_model,
                 cache_status="MISS",
                 gateway_latency_ms=gateway_latency_ms,
                 upstream_latency_ms=upstream_latency_ms,

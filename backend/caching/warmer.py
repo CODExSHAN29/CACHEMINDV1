@@ -9,6 +9,7 @@ from backend.caching.factory import get_cache_backend
 from backend.caching.fingerprint import compute_exact_request_hash, compute_scope_hash, extract_system_prompt
 from backend.caching.models import CachedResponse
 from backend.normalization.models import NormalizedInferenceRequest, NormalizedMessage
+from backend.routing.model_catalog import resolve_model
 from backend.security.pii import PIIBlockedException, PIISanitizer
 from backend.semantic.factory import get_semantic_cache_service
 from backend.semantic.policy import evaluate_semantic_eligibility
@@ -101,9 +102,12 @@ class CacheWarmer:
                 user_msgs = [m.content for m in messages if m.role == "user" and isinstance(m.content, str)]
                 last_user_text = user_msgs[-1] if user_msgs else ""
 
+                # Authoritative model resolution before computing hashes
+                target = resolve_model(item.model)
+
                 norm_req = NormalizedInferenceRequest(
-                    provider=item.provider,
-                    model=item.model,
+                    provider=target.provider,
+                    model=target.canonical_model,
                     messages=messages,
                     temperature=item.temperature,
                     stream=False,
@@ -112,13 +116,19 @@ class CacheWarmer:
                 )
 
                 # 2. Derive Exact Hash & Scope Hash
-                exact_hash = compute_exact_request_hash(tenant_id, project_id, norm_req)
+                exact_hash = compute_exact_request_hash(
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    provider=target.provider,
+                    model=target.canonical_model,
+                    request=norm_req,
+                )
                 sys_prompt = extract_system_prompt(norm_req)
                 scope_hash = compute_scope_hash(
                     tenant_id=tenant_id,
                     project_id=project_id,
-                    provider=norm_req.provider,
-                    model=norm_req.model,
+                    provider=target.provider,
+                    model=target.canonical_model,
                     system_prompt=sys_prompt,
                     temperature=norm_req.temperature,
                     namespace=norm_req.namespace,
@@ -147,7 +157,7 @@ class CacheWarmer:
                     "id": req_id,
                     "object": "chat.completion",
                     "created": int(time.time()),
-                    "model": item.model,
+                    "model": target.canonical_model,
                     "choices": [
                         {
                             "index": 0,
@@ -169,8 +179,8 @@ class CacheWarmer:
                 cached_entry = CachedResponse(
                     exact_request_hash=exact_hash,
                     response_payload=raw_response,
-                    provider=item.provider,
-                    model=item.model,
+                    provider=target.provider,
+                    model=target.canonical_model,
                     content=resolved_content,
                     ttl_seconds=item.ttl_seconds,
                     namespace=item.namespace,
@@ -201,8 +211,8 @@ class CacheWarmer:
                             created_at=time.time(),
                             input_text=last_user_text,
                             system_prompt=sys_prompt,
-                            provider=item.provider,
-                            model=item.model,
+                            provider=target.provider,
+                            model=target.canonical_model,
                             ttl_seconds=item.ttl_seconds,
                             tenant_id=tenant_id,
                             project_id=project_id,

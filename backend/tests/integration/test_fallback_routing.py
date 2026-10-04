@@ -114,3 +114,25 @@ async def test_endpoint_diagnostic_routing_headers(
     assert resp2.headers["X-CacheMind-Model"] == "gpt-4o-mini"
     assert resp2.headers["X-CacheMind-Fallback-Hops"] == "0"
 
+
+@pytest.mark.asyncio
+async def test_unknown_model_fails_fast_with_400(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    tenant_a_fixtures: dict,
+):
+    raw_key = tenant_a_fixtures["raw_key"]
+    headers = {"Authorization": f"Bearer {raw_key}"}
+
+    payload = {
+        "model": "non-existent-unregistered-model-12345",
+        "messages": [{"role": "user", "content": "This should fail fast"}],
+    }
+
+    resp = await async_client.post("/v1/chat/completions", headers=headers, json=payload)
+    assert resp.status_code == 400
+    data = resp.json()
+    assert "detail" in data
+    assert "Unknown model identifier" in data["detail"]
+
+

@@ -4,7 +4,8 @@ from typing import Any, Dict, List, Optional
 from backend.normalization.canonicalizer import canonicalize_request, sha256_json
 from backend.normalization.models import NormalizedInferenceRequest
 
-SEMANTIC_POLICY_VERSION = "v2"
+EXACT_CACHE_IDENTITY_VERSION = "v2"
+SEMANTIC_POLICY_VERSION = "v3"
 
 
 def extract_system_prompt(request: NormalizedInferenceRequest) -> Optional[str]:
@@ -16,14 +17,22 @@ def extract_system_prompt(request: NormalizedInferenceRequest) -> Optional[str]:
 
 
 def compute_exact_request_hash(
-    tenant_id: str, project_id: str, request: NormalizedInferenceRequest
+    tenant_id: str,
+    project_id: str,
+    provider: str,
+    model: str,
+    request: NormalizedInferenceRequest,
+    version: str = EXACT_CACHE_IDENTITY_VERSION,
 ) -> str:
     """
     Computes a cryptographic exact request hash binding tenant identity,
-    project identity, and canonicalized inference payload.
+    project identity, resolved provider, canonical model, and canonicalized inference payload.
     """
     canonical_body = canonicalize_request(request)
-    composite = f"tenant:{tenant_id}|proj:{project_id}|body:{canonical_body}"
+    composite = (
+        f"v:{version}|tenant:{tenant_id}|proj:{project_id}|"
+        f"provider:{provider}|model:{model}|body:{canonical_body}"
+    )
     return hashlib.sha256(composite.encode("utf-8")).hexdigest()
 
 
