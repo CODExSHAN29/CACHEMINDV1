@@ -25,7 +25,7 @@ class WarmItem(BaseModel):
     completion: Optional[str] = Field(default=None, description="Alias for response text")
     response: Optional[str] = Field(default=None, description="The authoritative pre-computed completion text")
     model: str = Field(default="gpt-4o", description="Target model name")
-    provider: str = Field(default="openai", description="Target provider name")
+    provider: Optional[str] = Field(default=None, description="Target provider name")
     system_prompt: Optional[str] = Field(default=None, description="Optional system prompt")
     temperature: float = Field(default=0.0, description="Temperature setting (default 0.0)")
     namespace: Optional[str] = Field(default=None, description="Optional semantic namespace")
@@ -104,6 +104,12 @@ class CacheWarmer:
 
                 # Authoritative model resolution before computing hashes
                 target = resolve_model(item.model)
+
+                # Validate provider if explicitly provided
+                if item.provider is not None and item.provider.strip().lower() != target.provider.strip().lower():
+                    raise ValueError(
+                        f"Provider mismatch for model '{item.model}': item declared provider '{item.provider}' but model resolves to '{target.provider}'"
+                    )
 
                 norm_req = NormalizedInferenceRequest(
                     provider=target.provider,

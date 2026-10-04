@@ -43,6 +43,8 @@ class StreamAccumulator:
         model_used: Optional[str] = None,
         raw_requested_model: Optional[str] = None,
         fallback_hops: int = 0,
+        backfill_exact_hash: Optional[str] = None,
+        backfill_scope_hash: Optional[str] = None,
     ) -> None:
         self.upstream_stream = upstream_stream
         self.request_id = request_id
@@ -59,11 +61,15 @@ class StreamAccumulator:
         self.model_used = model_used or norm_req.model
         self.raw_requested_model = raw_requested_model or norm_req.model
         self.fallback_hops = fallback_hops
+        # Use passed-in hashes; fall back to independent derivation if not provided
+        self.backfill_exact_hash = backfill_exact_hash
+        self.backfill_scope_hash = backfill_scope_hash
 
         # Accumulation State
         self.accumulated_chunks: List[str] = []
         self.accumulated_role: str = "assistant"
         self.accumulated_finish_reason: str = "stop"
+        # Use model_used rather than norm_req.model as base, but may be overridden
         self.accumulated_model: str = model_used or norm_req.model
         self.accumulated_system_fingerprint: Optional[str] = None
         self.accumulated_usage: Optional[Dict[str, int]] = None
@@ -179,23 +185,27 @@ class StreamAccumulator:
             except Exception:
                 ttl_seconds = settings.DEFAULT_CACHE_TTL_SECONDS
 
-        # Derive Backfill Exact Hash & Scope Hash under Executed Target
-        if self.provider_used != self.norm_req.provider or self.accumulated_model != self.norm_req.model:
+        # Determine effective executed model and backfill hashes
+        effective_model = self.model_used or self.accumulated_model
+        if self.backfill_exact_hash is not None and self.backfill_scope_hash is not None:
+            backfill_exact_hash = self.backfill_exact_hash
+            backfill_scope_hash = self.backfill_scope_hash
+        elif self.provider_used != self.norm_req.provider or effective_model != self.norm_req.model:
             backfill_norm_req = self.norm_req.model_copy(
-                update={"provider": self.provider_used, "model": self.accumulated_model}
+                update={"provider": self.provider_used, "model": effective_model}
             )
             backfill_exact_hash = compute_exact_request_hash(
                 tenant_id=self.identity.tenant_id,
                 project_id=self.identity.project_id,
                 provider=self.provider_used,
-                model=self.accumulated_model,
+                model=effective_model,
                 request=backfill_norm_req,
             )
             backfill_scope_hash = compute_scope_hash(
                 tenant_id=self.identity.tenant_id,
                 project_id=self.identity.project_id,
                 provider=self.provider_used,
-                model=self.accumulated_model,
+                model=effective_model,
                 system_prompt=self.system_prompt,
                 temperature=self.norm_req.temperature,
                 namespace=self.norm_req.namespace,
@@ -222,7 +232,7 @@ class StreamAccumulator:
                 exact_request_hash=backfill_exact_hash,
                 response_payload=raw_response,
                 provider=self.provider_used,
-                model=self.accumulated_model,
+                model=effective_model,
                 ttl_seconds=ttl_seconds,
                 namespace=self.norm_req.namespace,
                 tags=self.norm_req.tags,
@@ -255,7 +265,7 @@ class StreamAccumulator:
                         input_text=self.last_user_text,
                         system_prompt=self.system_prompt,
                         provider=self.provider_used,
-                        model=self.accumulated_model,
+                        model=effective_model,
                         ttl_seconds=ttl_seconds,
                         tenant_id=self.identity.tenant_id,
                         project_id=self.identity.project_id,
@@ -278,9 +288,9 @@ class StreamAccumulator:
                 project_id=self.identity.project_id,
                 provider=self.provider_used,
                 requested_model=self.raw_requested_model,
-                actual_model=self.accumulated_model,
+                actual_model=effective_model,
                 cache_status="MISS",
-                exact_request_hash=self.exact_request_hash,
+                exact_request_hash=backfill_exact_hash,
                 gateway_latency_ms=gateway_latency_ms,
                 upstream_latency_ms=upstream_latency_ms,
                 exact_cache_lookup_ms=self.exact_cache_lookup_ms,

@@ -27,7 +27,16 @@ def compute_exact_request_hash(
     """
     Computes a cryptographic exact request hash binding tenant identity,
     project identity, resolved provider, canonical model, and canonicalized inference payload.
+    Enforces strict consistency between explicit provider/model parameters and the request payload.
     """
+    if request.provider is not None and request.provider != provider:
+        raise ValueError(
+            f"Contradictory provider in compute_exact_request_hash: request.provider='{request.provider}' vs explicit provider='{provider}'"
+        )
+    if request.model is not None and request.model != model:
+        raise ValueError(
+            f"Contradictory model in compute_exact_request_hash: request.model='{request.model}' vs explicit model='{model}'"
+        )
     canonical_body = canonicalize_request(request)
     composite = (
         f"v:{version}|tenant:{tenant_id}|proj:{project_id}|"

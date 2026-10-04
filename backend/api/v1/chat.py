@@ -388,6 +388,42 @@ async def create_chat_completion(
     if norm_req.stream:
         try:
             streaming_result = await routing_engine.execute_stream(norm_req)
+            # Compute actual fallback hashes for streaming BEFORE constructing accumulator
+            if streaming_result.provider_used != norm_req.provider or streaming_result.model_used != norm_req.model:
+                backfill_norm_req = norm_req.model_copy(
+                    update={"provider": streaming_result.provider_used, "model": streaming_result.model_used}
+                )
+                streaming_backfill_exact_hash = compute_exact_request_hash(
+                    tenant_id=identity.tenant_id,
+                    project_id=identity.project_id,
+                    provider=streaming_result.provider_used,
+                    model=streaming_result.model_used,
+                    request=backfill_norm_req,
+                )
+                streaming_backfill_scope_hash = compute_scope_hash(
+                    tenant_id=identity.tenant_id,
+                    project_id=identity.project_id,
+                    provider=streaming_result.provider_used,
+                    model=streaming_result.model_used,
+                    system_prompt=system_prompt,
+                    temperature=norm_req.temperature,
+                    namespace=norm_req.namespace,
+                    tags=norm_req.tags,
+                    top_p=norm_req.top_p,
+                    max_tokens=norm_req.max_tokens,
+                    max_completion_tokens=norm_req.max_completion_tokens,
+                    presence_penalty=norm_req.presence_penalty,
+                    frequency_penalty=norm_req.frequency_penalty,
+                    seed=norm_req.seed,
+                    stop=norm_req.stop,
+                    response_format=norm_req.response_format,
+                    tools=norm_req.tools,
+                    tool_choice=norm_req.tool_choice,
+                )
+            else:
+                streaming_backfill_exact_hash = exact_request_hash
+                streaming_backfill_scope_hash = scope_hash
+
             accumulator = StreamAccumulator(
                 upstream_stream=streaming_result.stream,
                 request_id=request_id,
@@ -404,12 +440,14 @@ async def create_chat_completion(
                 model_used=streaming_result.model_used,
                 raw_requested_model=raw_requested_model,
                 fallback_hops=streaming_result.fallback_hops,
+                backfill_exact_hash=streaming_backfill_exact_hash,
+                backfill_scope_hash=streaming_backfill_scope_hash,
             )
             headers = {
                 "X-CacheMind-Status": "MISS",
                 "X-CacheMind-Cache": "MISS",
                 "X-CacheMind-Request-ID": request_id,
-                "X-CacheMind-Exact-Hash": exact_request_hash,
+                "X-CacheMind-Exact-Hash": streaming_backfill_exact_hash,
                 "X-CacheMind-Lookup-Ms": f"{exact_cache_lookup_ms:.3f}",
                 "X-CacheMind-Provider": streaming_result.provider_used,
                 "X-CacheMind-Model": streaming_result.model_used,
@@ -574,22 +612,22 @@ async def create_chat_completion(
             ttl_seconds = settings.DEFAULT_CACHE_TTL_SECONDS
 
     # Derive Backfill Exact Hash & Scope Hash under Executed Target
-    if routing_result.provider_used != norm_req.provider or provider_resp.model != norm_req.model:
+    if routing_result.provider_used != norm_req.provider or routing_result.model_used != norm_req.model:
         backfill_norm_req = norm_req.model_copy(
-            update={"provider": routing_result.provider_used, "model": provider_resp.model}
+            update={"provider": routing_result.provider_used, "model": routing_result.model_used}
         )
         backfill_exact_hash = compute_exact_request_hash(
             tenant_id=identity.tenant_id,
             project_id=identity.project_id,
             provider=routing_result.provider_used,
-            model=provider_resp.model,
+            model=routing_result.model_used,
             request=backfill_norm_req,
         )
         backfill_scope_hash = compute_scope_hash(
             tenant_id=identity.tenant_id,
             project_id=identity.project_id,
             provider=routing_result.provider_used,
-            model=provider_resp.model,
+            model=routing_result.model_used,
             system_prompt=system_prompt,
             temperature=norm_req.temperature,
             namespace=norm_req.namespace,
@@ -614,7 +652,7 @@ async def create_chat_completion(
         exact_request_hash=backfill_exact_hash,
         response_payload=provider_resp.raw_response,
         provider=routing_result.provider_used,
-        model=provider_resp.model,
+        model=routing_result.model_used,
         ttl_seconds=ttl_seconds,
         namespace=norm_req.namespace,
         tags=norm_req.tags,
@@ -647,7 +685,7 @@ async def create_chat_completion(
                     input_text=last_user_text,
                     system_prompt=system_prompt,
                     provider=routing_result.provider_used,
-                    model=provider_resp.model,
+                    model=routing_result.model_used,
                     ttl_seconds=ttl_seconds,
                     tenant_id=identity.tenant_id,
                     project_id=identity.project_id,
@@ -663,6 +701,9 @@ async def create_chat_completion(
 
     gateway_latency_ms = (time.perf_counter_ns() - gateway_start_ns) / 1_000_000
 
+    # Determine effective hash for telemetry and response headers
+    effective_exact_hash = backfill_exact_hash if routing_result.provider_used != norm_req.provider or routing_result.model_used != norm_req.model else exact_request_hash
+
     # 8. Telemetry Logging
     await TelemetryService.record_request_log(
         db=db,
@@ -671,9 +712,9 @@ async def create_chat_completion(
         project_id=identity.project_id,
         provider=routing_result.provider_used,
         requested_model=raw_requested_model,
-        actual_model=provider_resp.model,
+        actual_model=routing_result.model_used,
         cache_status=cache_status,
-        exact_request_hash=exact_request_hash,
+        exact_request_hash=effective_exact_hash,
         gateway_latency_ms=gateway_latency_ms,
         upstream_latency_ms=upstream_latency_ms,
         exact_cache_lookup_ms=exact_cache_lookup_ms,
@@ -701,12 +742,12 @@ async def create_chat_completion(
         "X-CacheMind-Status": "MISS",
         "X-CacheMind-Cache": "MISS",
         "X-CacheMind-Request-ID": request_id,
-        "X-CacheMind-Exact-Hash": exact_request_hash,
+        "X-CacheMind-Exact-Hash": effective_exact_hash,
         "X-CacheMind-Gateway-Latency-Ms": f"{gateway_latency_ms:.3f}",
         "X-CacheMind-Lookup-Ms": f"{exact_cache_lookup_ms:.3f}",
         "X-CacheMind-Upstream-Ms": f"{upstream_latency_ms:.3f}",
         "X-CacheMind-Provider": routing_result.provider_used,
-        "X-CacheMind-Model": provider_resp.model,
+        "X-CacheMind-Model": routing_result.model_used,
         "X-CacheMind-Fallback-Hops": str(routing_result.fallback_hops),
         "X-CacheMind-Coalesced": "true" if was_coalesced else "false",
         **rl_headers,
