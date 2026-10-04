@@ -216,7 +216,7 @@ async def create_chat_completion(
         get_metrics_collector().record_request(
             tenant_id=identity.tenant_id,
             provider=cached.provider or norm_req.provider,
-            model=raw_requested_model,
+            model=cached.model or norm_req.model,
             cache_status="EXACT_HIT",
             gateway_latency_ms=gateway_latency_ms,
             upstream_latency_ms=None,
@@ -325,7 +325,7 @@ async def create_chat_completion(
                             project_id=identity.project_id,
                             provider=norm_req.provider,
                             requested_model=raw_requested_model,
-                            actual_model=response_body.get("model", norm_req.model),
+                            actual_model=norm_req.model,
                             cache_status=cache_status,
                             exact_request_hash=exact_request_hash,
                             gateway_latency_ms=gateway_latency_ms,
@@ -342,7 +342,7 @@ async def create_chat_completion(
                         get_metrics_collector().record_request(
                             tenant_id=identity.tenant_id,
                             provider=norm_req.provider,
-                            model=raw_requested_model,
+                            model=norm_req.model,
                             cache_status="L2_HIT",
                             gateway_latency_ms=gateway_latency_ms,
                             upstream_latency_ms=None,
@@ -359,8 +359,8 @@ async def create_chat_completion(
                             "X-CacheMind-Similarity": f"{cand.similarity:.4f}",
                             "X-CacheMind-Gateway-Latency-Ms": f"{gateway_latency_ms:.3f}",
                             "X-CacheMind-Lookup-Ms": f"{exact_cache_lookup_ms:.3f}",
-                            "X-CacheMind-Provider": cand_payload.get("provider", norm_req.provider),
-                            "X-CacheMind-Model": response_body.get("model", norm_req.model),
+                            "X-CacheMind-Provider": norm_req.provider,
+                            "X-CacheMind-Model": norm_req.model,
                             "X-CacheMind-Fallback-Hops": "0",
                             **rl_headers,
                         }
@@ -729,7 +729,7 @@ async def create_chat_completion(
     get_metrics_collector().record_request(
         tenant_id=identity.tenant_id,
         provider=routing_result.provider_used,
-        model=raw_requested_model,
+        model=routing_result.model_used,
         cache_status="MISS",
         gateway_latency_ms=gateway_latency_ms,
         upstream_latency_ms=upstream_latency_ms,

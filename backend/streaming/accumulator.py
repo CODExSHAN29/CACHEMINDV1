@@ -304,7 +304,7 @@ class StreamAccumulator:
             get_metrics_collector().record_request(
                 tenant_id=self.identity.tenant_id,
                 provider=self.provider_used,
-                model=self.raw_requested_model,
+                model=effective_model,
                 cache_status="MISS",
                 gateway_latency_ms=gateway_latency_ms,
                 upstream_latency_ms=upstream_latency_ms,

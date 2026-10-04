@@ -311,3 +311,73 @@ async def test_fallback_routing_cache_isolation(
     assert final_cache_check is not None
     assert final_cache_check.provider == "anthropic"
     assert final_cache_check.model == fallback_model
+
+
+@pytest.mark.asyncio
+async def test_fallback_routing_metrics_finops_attribution(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    tenant_a_fixtures: dict,
+    monkeypatch,
+):
+    """
+    Validates that on fallback execution, MetricsCollector receives the executed fallback
+    provider and model for accurate Prometheus metrics labels and FinOps pricing calculations,
+    and TelemetryService records both raw requested_model and actual_model.
+    """
+    from backend.app.config import settings
+    from backend.metrics.collector import get_metrics_collector
+    from backend.db.models import RequestLog
+    from sqlalchemy import select
+
+    fallback_model = "claude-3-5-sonnet-20241022"
+    monkeypatch.setattr(settings, "ANTHROPIC_FALLBACK_MODEL", fallback_model)
+
+    raw_key = tenant_a_fixtures["raw_key"]
+    headers = {
+        "Authorization": f"Bearer {raw_key}",
+        "X-CacheMind-Allow-Fallback": "true",
+    }
+
+    registry = get_provider_registry()
+    registry.register("openai", FailingMockProvider(provider_name="openai"))
+    registry.register("anthropic", WorkingMockProvider(provider_name="anthropic"))
+
+    metrics_collector = get_metrics_collector()
+    recorded_metrics = []
+    original_record_request = metrics_collector.record_request
+
+    def spy_record_request(*args, **kwargs):
+        recorded_metrics.append((args, kwargs))
+        return original_record_request(*args, **kwargs)
+
+    monkeypatch.setattr(metrics_collector, "record_request", spy_record_request)
+
+    payload = {
+        "model": "gpt-4o",
+        "messages": [{"role": "user", "content": "FinOps fallback test"}],
+        "temperature": 0.0,
+    }
+
+    resp = await async_client.post("/v1/chat/completions", headers=headers, json=payload)
+    assert resp.status_code == 200
+    assert resp.headers["X-CacheMind-Status"] == "MISS"
+    assert resp.headers["X-CacheMind-Provider"] == "anthropic"
+    assert resp.headers["X-CacheMind-Model"] == fallback_model
+
+    # Verify MetricsCollector was called with the executed fallback target
+    assert len(recorded_metrics) == 1
+    call_kwargs = recorded_metrics[0][1]
+    assert call_kwargs["provider"] == "anthropic"
+    assert call_kwargs["model"] == fallback_model
+    assert call_kwargs["cache_status"] == "MISS"
+
+    # Verify DB RequestLog contains requested_model vs actual_model separation
+    result = await db_session.execute(
+        select(RequestLog).where(RequestLog.tenant_id == tenant_a_fixtures["tenant_id"]).order_by(RequestLog.created_at.desc())
+    )
+    log = result.scalars().first()
+    assert log is not None
+    assert log.requested_model == "gpt-4o"
+    assert log.actual_model == fallback_model
+    assert log.provider == "anthropic"

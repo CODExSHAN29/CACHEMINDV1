@@ -191,3 +191,86 @@ async def test_volatility_ttl_assigned_in_flow(
     assert resp_e.status_code == 200
     assert resp_e.headers["X-CacheMind-Status"] == "MISS"
     assert provider.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_semantic_hit_model_attribution_and_preservation(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    tenant_a_fixtures: dict,
+    monkeypatch,
+):
+    """
+    Validates that on an L2 semantic cache hit:
+    1. Client response body preserves the client-requested model.
+    2. Response headers X-CacheMind-Provider and X-CacheMind-Model reflect norm_req.provider and norm_req.model.
+    3. Telemetry records requested_model (raw client model) and actual_model (norm_req.model).
+    4. MetricsCollector.record_request receives norm_req.provider and norm_req.model.
+    """
+    from backend.metrics.collector import get_metrics_collector
+
+    raw_key = tenant_a_fixtures["raw_key"]
+    headers = {"Authorization": f"Bearer {raw_key}"}
+
+    embed_engine = SemanticCacheFactory.get_embedding_engine()
+    t1 = "Explain quantum computing simply"
+    t2 = "Explain quantum physics and computing in simple terms"
+    embed_engine.register_similar(t1, t2, similarity=0.95)
+
+    metrics_collector = get_metrics_collector()
+    recorded_metrics = []
+    original_record_request = metrics_collector.record_request
+
+    def spy_record_request(*args, **kwargs):
+        recorded_metrics.append((args, kwargs))
+        return original_record_request(*args, **kwargs)
+
+    monkeypatch.setattr(metrics_collector, "record_request", spy_record_request)
+
+    # 1. Seed L2 cache via MISS
+    payload_1 = {
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "user", "content": t1}],
+        "temperature": 0.0,
+    }
+    resp1 = await async_client.post("/v1/chat/completions", headers=headers, json=payload_1)
+    assert resp1.status_code == 200
+    assert resp1.headers["X-CacheMind-Status"] == "MISS"
+
+    recorded_metrics.clear()
+
+    # 2. Query with semantically similar prompt -> L2_HIT
+    payload_2 = {
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "user", "content": t2}],
+        "temperature": 0.0,
+    }
+    resp2 = await async_client.post("/v1/chat/completions", headers=headers, json=payload_2)
+    assert resp2.status_code == 200
+    assert resp2.headers["X-CacheMind-Status"] == "L2_HIT"
+
+    # Verify diagnostic headers use norm_req.provider and norm_req.model
+    assert resp2.headers["X-CacheMind-Provider"] == "openai"
+    assert resp2.headers["X-CacheMind-Model"] == "gpt-4o-mini"
+
+    # Verify response body preserves client-requested model
+    data2 = resp2.json()
+    assert data2["model"] == "gpt-4o-mini"
+
+    # Verify MetricsCollector was called with norm_req.provider and norm_req.model
+    assert len(recorded_metrics) == 1
+    call_kwargs = recorded_metrics[0][1]
+    assert call_kwargs["provider"] == "openai"
+    assert call_kwargs["model"] == "gpt-4o-mini"
+    assert call_kwargs["cache_status"] == "L2_HIT"
+
+    # Verify Telemetry log has requested_model and actual_model
+    result = await db_session.execute(
+        select(RequestLog).where(RequestLog.cache_status == "L2_HIT").order_by(RequestLog.created_at.desc())
+    )
+    log = result.scalars().first()
+    assert log is not None
+    assert log.requested_model == "gpt-4o-mini"
+    assert log.actual_model == "gpt-4o-mini"
+    assert log.provider == "openai"
+
